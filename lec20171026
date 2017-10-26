@@ -1,0 +1,212 @@
+LEC 26 OCT 2017
+
+class Book{
+	string title, author;
+	int numPages;
+	public:
+		Book(...);
+};
+
+class Text: public Book{
+	string topic;
+	public:
+		Text(...);
+};
+class Comic: public Book{
+	string hero;
+	public:
+		Comic(...);
+};
+
+Text, Comic inherit title, author, numPages
+Any method that can be called on Book can be called on Text, Comic
+
+Who can see the members?
+title, author, numPages private in Book - outsiders can't see them
+Can Text, Comic see them? NO - even subclasses can't see them
+
+eg:
+	Text t; // Can't access t.author (private), but can call t.getAuthor()
+
+How do we initialize Text?
+
+class Text:public Book{
+	string topic;
+	public:
+	Text(string title, string author, int numPages, string topic):
+		title{title}, author{author}, numPages{numPages},topic{topic}{}
+		...
+} // DOES NOT COMPILE
+
+Wrong for 2 reasons:
+	1-title, etc not accessible in Text
+	2-When an object is created:
+		1-Space is allocated
+		2-Superclass part is constructed (NEW)
+		3-Fields constructed in declaration order
+		4-ctor body runs
+	 -Note: When an object is destroyed
+		1-dtor body runs
+		2-Fields destroyed in reverse declaration order
+		3-Superclass part destructed(NEW)
+		4-Space deallocated
+	 -and (2) doesn't work - Book has no default ctor!
+
+Fix:
+	-invoke Book's ctor in Text's MIL:
+	class Text:public Book{
+		string topic;
+		public:
+		Text(string title, string author, int numPages, string topic):
+			Book{title,author,numPages}, topic{topic}{}
+			[<--step 2--------------->]  [<step 3-->](4)
+	};
+	-If the superclass has no default ctor, the subclass MUST invoke a ctor in its MIL
+
+===Good reasons to keep superclass fields inaccessible to subclasses===
+	-If you want to give subclasses access to certain members,
+	 use PROTECTED visibility:
+	class Book{
+		protected: // fields here accessible to book & subclasses ONLY
+			string title, author;
+			int numPages;
+		public:
+			Book(...);
+			...
+	};
+
+	-Things you could do with it:
+	class Text:public Book{
+		...
+		public:
+			void addAuthor(string auth){author += auth;}
+							^OK if author is protected
+	Not a good idea to give subclasses unlimited access to fields - could potential break invariant fields
+	-opens up encapsulation loophole
+
+Better:
+	-make fields private, but provide protected accessors/mutators
+	class Book{
+		string title,author;
+		int numPages;
+		protected:
+			void setAuthor(string auth); // only a subclass can call it
+		public:
+			...
+			bool isHeavy() const;
+	}
+
+Relationship among Book, Text, Comic called "is a"
+	-a Text is a Book
+	-a Comic is a Book
+	UML:
+		[Book]
+		  ^
+	   |------|------------|
+	-Implement "is a" by public inheritance
+	[Text]               [Comic}
+
+	Consider isHeavy - when is a Book heavy?
+		-for Ordinary Books: > 200 pages
+		-for Texts: > 500 pages
+		-for Comics: > 30 pages
+
+	class Book{
+		...
+		protected:
+			int numPages;
+		public:
+			...
+			bool isHeavy() const {return numPages > 200;}
+	};
+	class Comic: public Book{
+		...
+		public:
+			bool isHeavy() const {return numPages >30;}
+	}
+	Text - similar
+
+	Book b {"small book", ..., 50};
+	Comic c {"big comic", ..., 40, ...};
+	
+	cout << b.isHeavy(); //false
+	cout << c.isHeavy(); //true
+
+	Since inheritance means "is a", we can do this:
+		Book b = Comic {"big comic",...,40,...};
+		
+		Q: Is b heavy? ie: b.isHeavy() //true or false?
+	 	  Does Book::isHeavy or Comic::isHeavy run?
+		A: NO. b is not heavy, because Book::isHeavy runs.
+
+	Why?
+		Book		Comic
+		[title   ]	[title   ]
+		[author  ]	[author  ]
+		[numPages]	[numPages]
+				[hero    ]
+
+		Book b = Comic{...};
+		-tries to fit a Comic obj, where there is only space for Book obj
+		 What happens? Comic is SLICED
+		-hero field chopped off, comic becomes a book
+		-So Book::isHeavy runs.
+
+When accessing object through ptrs, slicing is unnecessary & doesn't happen
+	Comic c {...,...,40,...};
+	Book *pb = &c;
+	Comic *pc = &c;
+	//Note: "Text *pt = &c" would not compile, b/c Text is not a comic
+
+	cout << pc->isHeavy(); //true
+	cout << pb->isHeavy(); //??? ANS: NO
+
+	Still, Book::isHeavy runs when we access pb->isHeavy();
+	Compiler uses the type of the POINTER (or REF) to decide which 
+	isHeavy to run - does not consider the actual type of the obj
+
+	Means a Comic is only a Comic when a Comic ptr (ref) points at it
+	-probably not what we want
+
+How do we make Comic act like a Comic, even when pointed to by a Book Pointer?
+	Declare the method VIRTUAL
+	
+	class Book{
+		...
+		public:
+			...
+			virtual bool isHeavy() const{ return numPages >200;}}
+			^keyword
+	}
+	class Comic: public Book{
+		...
+		public:
+			bool isHeavy() const override {return numPages >30;}
+					     ^keyword
+	};
+
+	Comic c {...,...,40,...};
+	Book *pb = &c;
+	Book &rb = c;
+	Comic *pc = &c;
+
+	cout << pc->isHeavy() //true
+	cout << pb->isHeavy() //true
+	cout << rb.isHeavy()  //true
+	// Comic::isHeavy runs in each case
+
+	-virtual methods - choose which class method to run, based on the actual type
+	 of the object at runtime
+
+Eg: My book collection
+	Book *myBooks[20];
+	...
+	for(int i = 0; i<20; ++c){
+		cout << myBook[i]->isHeavy() << endl;
+				   ^ this uses Book::isHeavy for Books
+					       Text::isHeavy for Texts
+					       Comic::isHeavy for Comics
+	}
+
+	Accommodates multiple types under one abstraction
+	-POLYMORPHISM ("many forms")
