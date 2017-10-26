@@ -1,0 +1,166 @@
+LECTURE 12 Oct 2017
+struct Node {
+	...
+	Node &operator=(const Node &other){
+		data = other.data;
+		delete next;
+		next = other.next? new Node {*other.next}: nullptr;
+		return *this;
+	} // DANGEROUS - n=n?
+}
+
+struct Node {
+	...
+	Node &operator=(const Node &other){
+		if(this==&other) return *this;
+		data = other.data;
+		delete next;
+		next = other.next? new Node {*other.next}: nullptr;
+		return *this; // What if new fails? The fn operator (=) will abort, next will point at deleted memory
+				// corrupted data structure
+	} // DANGEROUS - n=n?
+};
+
+Better:
+struct Node {
+	...
+	Node &operator=(const Node &other){
+		if(this==other) return *this;
+		Node *tmp = next;
+		data = other.data;
+		next = other.next? new Node {*other.next}: nullptr; // if new fails - operator aborts
+		delete tmp;  // next points at undeleted old nodes, data structure is not corrupted
+
+		return *this;
+	}
+Alternative: Copy-and-swap idioms
+
+#include <utility>
+struct Node{
+	...
+	void swap(Node &other){
+		using std:swap;
+		swap(data, otherdata);
+		swap(next, other.next);
+	}
+	Node &operator=(const Node &other){
+		Node tmp = other;
+		swap(tmp); //*this deep copy of other, tmp holds old data;
+		return *this; // tmp's dtor runs, frees the old data
+	}
+};
+	
+
+Notice: operator= is a member f'n(method), not a standalone f'n
+	When an operator is declared as a member function, *this
+	takes the rold of the first operand.
+	
+	eg:  struct Vec{
+		int x,y;
+		...
+		Vec operator+(const Vec &other){
+			return {x+other.x,y+other.y};
+		}
+		Vec operator*(const int k){ // Because Vec is the first operand, so this is V*k not k*V
+			return {x*k,y*k};
+		}
+};
+
+How do we implement k*V? Can't be a member f'n -first arg not a Vec!
+		ie: Must be standalone:
+
+Vec operator*(const int k, const Vec &v){
+	return v*k;
+}
+What about I/O operators?
+	
+struct Vec{
+	...
+	ostream &operator<<(ostream &out){
+		return out<< x << ' ' << y;
+	}
+};
+What's wrong with this?
+Makes Vec the LHS operand, not hte RHS operand
+=> use as
+	v << cout // confusing!
+So, define operator <<,>> as standalones
+
+Certain operators MUST be members:
+	- operator=
+	- operator[]
+	- operator->
+	- operator()
+	- operatorT (where T is a type)
+
+============SEPARATE COMPILATION FOR CLASSES========
+Node.h:
+#ifndef NODE_H
+#define NODE_H
+struct Node{
+	int data;
+	Node *next;
+	explicit Node(int data, Node *next=nullptr);
+	bool isSingleton();
+};
+#endif
+
+
+Node.cc:
+#include "Node.h"
+Node::Node(int data, Node *next): data {data}, next{next}{}
+bool Node::isSingleton(){return next==nullptr;}
+
+:: - called a SCOPE RESOLUTION OPERATOR
+Node:: ______ means _____ in the context of struct Node
+:: like . where the LHS is a class (or namespace), not an object
+
+=============CONST OBJECTS=================
+int f(const Node &n){...}
+	-const objects arise often, especially as params
+What is a const object? Fields CANNOT be modified
+Issue: the method may modify fields, violate const
+A: Yes - we can call methods that promise not to modify fields
+eg:
+struct Student{
+	int assns, mt, final;
+	float grade() const; // doesn't modify fields, so declare it const
+};
+float Student::grade() const {...}
+Compiler checks that const methods don't modify fields
+Only const methods may be called on const objects
+
+
+==============RVALUES & RVALUE REFERENCES==================
+Recall: - an lvalue is anything with an address (something you can point at)
+	- an lvalue ref & is like a const pointer with automatic deferencing (always initialized to an lvalue)
+
+Now consider: Node n {l, new Node {2, nullptr}};
+		Node m=n; //copy constructor
+		Node m2; //default constructor
+		m2 = n; //copy assignment operator
+	
+	Node plusOne(Node n){
+		for(Node *p; p; p=p->next){
+			++ p->data;
+		}
+		return n;
+	}
+Node m3 = plusOne(n); // copy ctor
+	   ^ what is "other" here? Reference to what?
+- compiler creates a TEMPORARY OBJ to hold the result of plusOne
+- other is a ref to this temporary
+- copy ctor deep copies the data from this temporary
+
+BUT - the temporary is just going to be discardd anyway, as soon as the struct
+	Node m3 = plusOne(n) is done;
+	- wasteful to deep copy - why not steal the data
+- How can we tell whether other is a ref to a temporary or a standalone obj?
+C++ rvalue ref - Node && is a ref to a temp object
+((rvalue) of type Node)
+Version of the ctor that takes a Node &&
+	Node(Node &&other): data{other.data}, next{other.next}{
+		other.next = nullptr;
+	}
+};
+

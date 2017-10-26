@@ -1,0 +1,155 @@
+==========Recall: Move Ctor===========
+
+struct Node{
+	...
+	Node (Node &&other): data{other.data}, next {other.next} {
+	other.next = nullptr;
+	}
+};
+
+Similarly: Node m;
+	m = plusOne(n);
+Move assignment operator:
+	struct Node{
+		...
+		Node &operator=(Node &&other){
+			using std::swap;
+			swap(data,other.data); // Steal other's data
+			swap(next,other.next); // Destroy my old data
+			return *this;  // Easy: swap without the copy
+			// temp will be destroyed, take old data with it
+		}
+	}
+
+If you don't write move ctor/assignment, the copy versions will be used.
+If the move ctor/assignment is defined, it will replace all calls to the copy ctor/assignment
+	when the ("other") is a temporary.
+
+=======COPY/MOVE Elision (elision - actively skipping something)======
+Vec makeAVec(){
+	return {0,0}; // invoke basic ctor
+}
+Vec v = makeAVec(); // What runs? Copy ctor (if vec has no move ctors)
+			Move ctor (if it does exist a move ctor)
+g++: basic ctor only - no copy, no move
+In some circumstances, the compiler is allowed to skip calling copy/move ctors (but doesn't have to)
+In the example above: makeAVec writes its result ({0,0}) directly into the space occupied by v in the caller,
+	rather than copying it later.
+
+Eg: void doSomething(Vec V){...} // pass by value -copy or move ctor
+doSomething(makeAVec());
+	- the result of makeAVec is written directly into the parameter
+	- no copy/move
+This is allowed, even if dropping ctor calls would change the behavior of the program
+	eg: if ctors print something
+You are not expected to know exactly when copy/move elision is allowed
+	- just that it is possible
+If you need all the ctors to run:
+	g++14 -fno-elide-constructors file.cc
+	-but it's possible that you add thousands of ctor calls in your program
+	-it can slow your program down considerably
+
+In summary: Rule of 5 (Big 5)
+	-If you need to customize any one of the following 5 things
+		1-copy ctor
+		2-copy assignment
+		3-destructor
+		4-move ctor
+		5-move assignment
+	 then you usually need to customize all 5
+		(big five is guaranteed to appear on the midterm)
+
+
+=========ARRAYS OF OBJECTS==========
+struct Vec{
+	int x,y;
+	Vec(int x, int y): x{x}, y{y}{};
+};
+	Vec *vp = new Vec[15];
+	Vec moreVecs[10];
+	// both of these do not compile
+	// the objects CANNOT go unconstructed in C++
+	// These want to call the default ctor on each item - no default
+	// ctor for Vec; => error.
+Options:
+1-Provide a default ctor. (ask yourself: does it make sense to have a default ctor? eg: Person)
+2-For stack arrays:
+	Vec moreVecs[]={Vec {0,0}, Vec{1,1}, Vec{2,3}};
+3-For heap arrays:
+	-create array of ptrs (better solution: something we haven't seen yet)
+	Vec **vp = new Vec*[3];
+	vp[0] = new Vec{0,0};
+	vp[1] = new Vec{1,1};
+	..
+	for (int i = 0; int<3; ++i){
+		delete vp[i];
+	}
+	delete [] vp;
+
+==========INVARIANTS & ENCAPSULATION==============
+Consider: struct Node{
+	int data;
+	Node *next;
+	Node (int data, Node *next):
+		...
+	~Node() {delete next;}
+};
+
+Node n1 {1, new Node {2, nullptr}};
+Node n2 {3, nullptr};
+Node n3 {4, &n2};
+
+What happens when these go out of scope?
+	-n1: dtor runs, deletes the whole list
+	-n2,n3: n3's dtor tries to delete n2, but n2 is on the stack,
+		not the heap! - Undefined behavior!
+
+Nodes relies on an assumption for its proper operation: that next is nullptr or a valid ptr to the heap,
+allocated by new.
+
+This is an INVARIANT - statement that always holds true
+			-> that next is either nullptr or allocated by new - upon which Node relies
+		=> But we can't guarantee the invariant - can't trust the user to use Node properly.
+		=> Right now, can't enforce ANY invariants - the user can interfere with our data
+Eg: stack: Invariant: last item pushed is the first item popped
+		- but not if the client can rearrange the underlying data
+		-> hard to reason about programs without invariants
+
+To enforce invariants - introduce ENCAPSULATION
+		- want clients to treat our objects as black boxes - CAPSULES
+- implementation: details will be sealed away
+- can only interact via provided methods
+- creates an abstraction - regains control over our objects
+
+Eg:
+struct Vec {
+	Vec (int x, int y); // also public (default)
+	private: // can't be accessed outside struct
+		int x,y;
+	public:  // anyone can access
+		Vec operator+(const Vec &other);
+		...
+};
+	-default visibility in structs = public
+
+In general - fields should be private, only methods should be public.
+	- better to have default visibility = private
+	Switch from struct to class:
+	class Vec{
+		int x,y;
+		public:
+			Vec (int x, int y);
+			Vec operator+(const Vec &v);
+			...
+	};
+
+Difference between class & struct = default visibility
+	- public in struct(backwards compatibility with C), private in class	
+
+Fixed the linked list:
+// list.h
+	class List{
+		struct Node; // this is a type, not a field
+		Node* theList;
+	}
+	

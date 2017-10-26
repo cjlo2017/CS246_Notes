@@ -1,0 +1,157 @@
+LEC 19 Oct 2017
+
+Fix the linked list class:
+// list.h
+class List{
+	struct Node; //private nested class - TYPE
+		     //only accessible inside class list
+	Node * theList = nullptr;
+	Public:
+		void addToFront (int n);
+		int ith (int i);
+		~List();
+		...
+
+// list.cc
+#include "list.h"
+struct List::Node{
+	int data;
+	Node* next;
+	Node(int data, Node* next): ... {}
+	~Node(){delete next;}
+	...
+};
+
+void List::addToFront(int n){
+	theList = new Node {n, theList};
+}
+int List::ith(int i){
+	Node *cur;
+	for(int j = 0; j<i; ++j){
+		cur = cur->next;
+	}
+	return cur->data;
+}
+List::~List(){delete theList;}
+
+Only list can create/manipulate Node objects, therefore, I CAN guarantee the invariant:
+	-> next is always a nullptr or a heap ptr
+
+But, now we can't traverse the list from node to node as we would a linked.
+-> Repeatedly calling the ith the access the whole list = O(n^2) time.
+But we can't expose the nodes, or we lose encapsulation.
+
+A little bit aside:
+========SE Topic - Design Patterns========
+-certain problems/scenarios arise frequently
+-keep track of good solutions to these problems, and use them in similar situations
+-Design Pattern (good solutions to frequent problems, and are used so much that they have a name)
+	-If you have a situation like THIS then THIS technique may solve it
+
+Sol'n: Iterator Pattern (you can't give users ptrs, but can give them an object powerered by ptrs)
+	-intuition: like a bookmark, like little window that you see where the stuff is
+	-create a class that manages access to nodes
+	-abstraction of ptr
+	-walk the list without exposing the actual ptrs
+	-Inspiration: C
+		for(int* p = a; p != a+n; ++p){
+			cout << *p << endl;
+		}
+	class List{
+		struct Node;
+		Node* theList;
+		public:
+		...
+		class Iterator{
+			Node* p;
+			public:
+				explicit Iterator (node* p): p {p}{} //explicit: do not allow implicit conversion
+				int &operator*(){ return p->data; } //returning by reference so *p = 7 would work
+				    ^return by ref, the result is NOT a copy, can mutate list items 
+				Iterator& operator++(){ p=p->next; return *this; }
+				bool operator!=(const Iterator &other) const{ return p!=other.p}
+		}; // end of Class Iterator, still in Class List
+		Iterator begin() {return Iterator {theList};}
+		Iterator end() { return Iterator {nullptr};}
+	}; // end of Class List
+
+	-Client:
+	int main(){
+		List l;
+		l.addToFront(1);
+		l.addToFront(2);
+		l.addToFront(3);
+		for(List::Iterator it=l.begin(); it!=l.end(); ++it){
+			cout << *it << endl;
+		}
+	}
+	Note: O(n) traversal time
+
+	Shortcut: automatic type deduction -> auto x = y;
+						^automatically gives x the same type as its initializer y
+		for(auto it = l.begin(); it!=l.end(); ++it){
+			cout << *it << endl;
+		}
+
+	Trivia: auto used to mean not on static and not on stack
+
+	Shorter cut: range-based for loop:
+		for(auto n:l){ // n is a copy of list item, list will not be mutated
+			cout << n << endl;
+		}
+		-method must begin/end that produce iterators
+		-the iterator type must support unary*, !=, prefix ++;
+		
+		-If you want to modify list items (or save copying)
+		for(auto &n:l){
+			cout << n << endl;
+			++n; // WILL mutate list items
+		}	
+		for(const auto &n:l){...}
+	More on iterators later
+
+=========Encapsulation ctd===========
+List client can create iterators directly:
+	auto it=List::Iterator {nullptr};
+This violates encapsulation - client should be using begin/end
+This is a potential problem if the implementation changed
+-> We could - make Iterator's ctor private
+	    - then client can't call List::Iterator(...);
+	    - but then List can't call Iterator ctor
+
+Sol'n: Give List privileged access to Iterator
+	-make it a FRIEND
+	class List{
+		...
+		public:
+			class Iterator{
+				Node* p;
+				explicit Iterator(Node* p);
+				public:
+					...
+					...
+					...
+					friend class List; // List has access to all
+							   // members of Iterators
+			};
+			...
+			...
+			...
+		};
+	-Now List can still create Iterators, but client can only create Iterators by calling
+	 begin/end
+	-Give your classes as few friends as possible ->weakens encapsulation 
+	-Once again - keep fields private
+	
+What if you want to provide access to fields?
+-accessor/mutator methods
+
+class Vec{
+	int x,y;
+	public:
+		...
+		...
+		...
+		int getX() const{return x;}//accessor
+		void setY(int z) const{y=z;} //mutator
+};

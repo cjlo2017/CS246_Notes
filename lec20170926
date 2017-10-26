@@ -1,0 +1,173 @@
+Recall:
+struct Node{
+	int data;
+	Node *next;
+};
+Node n1 {5, nullptr}
+const Node n2=n1;
+const Node *p1=&n1; // can change n1, but ony directly; NOT through p1
+
+>> Node *p2=&n2 << illegal!
+	-can have ptr-to-const pointing to non-const
+	-cannot have ptr-to-non-const pointing to const
+
+=====PARAMETER PASSING=====
+Recall:
+void inc(int n){n=n+1};
+...
+int x=5;
+inc(x);
+cout<<x; //5 -why?
+
+Pass by value - inc gets a COPY of x, increments the copy
+		-int original unchanged
+
+Sol'n:
+	-If a function needs to modify a parameter - pass a pointer
+	void inc(int *n) {*n=*n+1};
+	...
+	int x=5;
+	inc(&x); // x's ADDRESS passed by value
+		 // inc changes the data at that address
+		 // visible to caller
+	cout << x; //6
+
+Q: Why cin >> x and not cin >> (&x)?
+YA: C++ has another pointer like references.
+
+======REFERENCES (important)=======
+
+int y=10;
+int &z=y; // z is an lvalue references to int (to y)
+	  // like a const ptr
+	  // similar to int *const z=&y;
+
+Refs are like constant ptrs with automatic dereferencing.
+
+   []---------->[10]
+   z            y
+can't change
+z = 12; (not *z=12) //now y=12
+
+int *p=&z; //&z gives the address of y
+
+In all cases, z behaves exactly like y.
+z is an ALIAS (another name) for y.
+
+=============THINGS YOU CAN'T DO WITH LVALUE REFERENCES===========
+-leave them uninitialized. eg: int &x;
+-must be initialized with something that has an address (ie. an lvalue)
+ since refs are ptrs
+	int &x=4; WRONG
+	int &x=y+z; WRONG
+	int &x=y; OK
+-create a ptr to a reference:
+	int &*x = ___; WRONG
+-reference to a pointer OK
+	int *&x= ___; OK
+-create a ref to a ref
+	int &&r=___; WRONG // it means something different (later)
+-create an array of refs	
+	int &r[3]={_,_,_}; WRONG
+
+=============What CAN you do?=============
+
+void inc(int &n){ // &n is a const ptr the argument (x)
+		  // changes to n affect x
+	n=n+1;
+}
+int x=5;
+inc(x);
+cout << x; //6
+
+>>>>> Why does cin >> x work? -Takes x by reference<<<<<
+
+istream & operator >> (istream &in, int &x);
+	// the stream comes in by REFERENCE and goes out by REFERENCE
+
+Pass-by-value, eg. int f(int n){...}; // copies the argument
+
+eg: struct reallyBig{...};
+    int f(reallyBig rb) {...} //copy - slow 
+
+int g(reallyBig &rb){...} //alias-fast. But could change rb in the caller
+
+int h(const reallyBig &rb) {...} //fast -no copy -parameter cannot be changed
+
+>> ADVICE:prefer pass-by-const-ref over pass-by-value for anything larger than a ptr
+	  unless the function needs to make a copy anyway - then use pass by value 
+
+ALSO:
+
+int f(int &n){...}
+int g(const int &n){...}
+
+f(5); //WRONG! can't initialize an lvalue ref (n) to a literal value
+	-if n changes, can't change the literal 5
+g(5); // OK - since n can never be changed, the compiler allows this
+	    - How? Compilier creates a TEMPORARY location in memory to hold the 5
+	      so the ref n has something to point to.	
+
+
+=======DYNAMIC MEMORY ALLOCATION=============
+
+C:
+int *p = malloc(____ *sizeof(int));
+...
+free(p);
+
+-> DON'T USE THESE IN C++.
+-> Instead: new/delete -type - aware, less error-prone
+
+Eg:
+Node *np = new Node;
+...
+delete np;
+
+-allocated memory resides on the heap
+-remains allocated until delete is called
+-if you don't delete all allocated memory
+	-> memory leak - program will eventually fail
+	-incorret behavior 
+
+Eg:
+
+Node getMeANode(){ // expensive -n is copied to caller's stack frame on return
+	Node n;
+	return n;
+}
+-return a ref (or a ptr) instead?
+
+Node &getMeANode(){ //BAD - returns a ptr to a stack allocated
+		    // data which is dead on return
+	Node n;
+	return n;
+}
+
+Node *getMeANode(){ //OK - return ptr to the heap - still alive
+		    // but don't forget to delete when done
+	return new Node;
+}
+
+=============OPERATOR OVERLOADING============
+Give meanings to c++ operators for new types
+
+Eg:
+struct Vec{
+	int x,y;
+};
+
+Vec operator+ {const Vec &v1, const Vec &v2){
+	Vec v {v1.x+v2.x, v1.y+v2.y};
+	return v;
+}
+
+Vec v,w,x;
+v = w + x; // OK!
+
+Vec operator*(const int k, const Vec &v1){ // k*v, but not v*k
+	return {k*v1.x,k*v1.y}; //OK because compilier knows it's a vec based on the return type;
+}
+Vec operator*(const Vec &v1, const int k){
+	return k*v1;
+} // calling the previously defined k*v1

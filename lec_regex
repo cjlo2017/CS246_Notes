@@ -1,0 +1,57 @@
+PATTERN Matching in text files
+
+
+grep/egrep - (extended) global regular expression print
+
+	egrep pattern file
+	- print every line in file that contains pattern
+	- eg: print everyline in index.html that contains cs246
+
+How many lines in index.html that contains CS246 or cs246?
+
+	egrep "cs246|CS246" index.html
+OR	egrep "(cs|CS)246" index.html
+
+Available patters: called regular expressions (different from globbing patterns)
+
+	"(c|C)(s|S)246" - also matches cS246, Cs246
+	== "[cC][sS]246"
+
+[...] - any one character between [ and ]
+[^..] - any one character except  ...
+
+Something
+
+? = 0 or 1 of preceding expression (in this case: 0 or 1 space)
+* = 0 or more of preceding
+
+(cs)*246 => 246, cs246, cscs246, cscscs246, ...
+
+.* = anything
+	eg: egrep "cs.*246" index.html
+	- lines containing cs...(anything)...246
+
+^,$ - beginning/end of the line
+
+	"^cs246" - lines that start with cs246
+	"^cs246$" - lines that equal to cs246
+
++ = 1 or more occurances
+.+ = non-empty
+
+	eg: lines of even length
+	- ^(..)*$
+
+	eg: files in the current dir whose names contain exactly one 'a'
+	- ls | egrep  "^[^a]*a[^a]$"
+
+	ex: All words in the global dictionary that start with e and has 5 characters.
+	- egrep "^e[.]???" /usr/share/dict/words
+
+
+PERMISSIONS
+
+ls -l => "long form" listing
+
+-rw-r----- | j2smith j2smith 25 sep 9 15:27 abc.txt
+

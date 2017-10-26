@@ -1,0 +1,140 @@
+LECTURE NOTES 20171005
+
+Student billy {60,70,80};
+Student bobby = billy; // copy ctor
+
+Writing your own copy ctor:
+	struct Student{
+		int assns, mt, final;
+		Student(...):{...}
+		Student(const Student &other): assns {other, assns},
+			mt{other.mt}, final {other.final} {}
+	};
+
+When is the built in copy constructor ctor not correct?
+struct Node{
+	int data;
+	Node *next;
+};
+
+Node *n = new Node {1, new Node {}, nullptr{} };
+Node m = *n;
+Node *p = new Node {*n};
+
+Memory: STACK      HEAP
+	n[]-------->[1|]--->[2|]---->[3|/]
+	m[1|]----------------^
+	p[]-------->[1|]-----^
+
+-> Simple copy of fields => only the first node is actually copied (shallow copy)
+-> If you wanted a DEEP copy (copies the whole list), must write your own copy ctor
+
+copy ctor:
+struct Node{ //must be by ref - by value would call the ctor, infinite recursion
+	...    v
+	Node (const Node &other): data {other.data}
+		next { other.next?  new Node {*other.next}: nullptr} {}
+						^calls copy ctor(recursion! builds the rest of the list)
+The copy ctor is called:
+1. When an object is initialized with another object.  >
+2. When an object is passed by value.                  > *Exceptions to all three (later)
+3. When an object is returned by a function.           > 
+
+
+
+--------------------------------------------
+BEWARE! of ctors that can take ONE arg.
+eg: struct Node{
+	explicit Node(int data): data{data}, next{nullptr} {}
+	...
+	};
+
+- but also:
+	Node n=4; -implicit conversion from int to Node,
+	string s = "hello"; -implicit conversion from char* to string
+
+int f(Node n) {...}
+f(4); // works - 4 implicitly converted to a Node
+
+Danger  - accidently pass an int to a f'n expecting Node
+	- potential errors not caught
+Good idea - disable the implicit conversion - making ctor explicit
+
+Then:
+	Node n {4}; OK
+	Node n=4 ; WRONG
+	f(4); WRONG
+	f(Node{4}); OK
+--------------------------------------------
+
+
+===============DESTRUCTORS=================
+When an object is destroyed (stack-allocated: goes out of scope)
+			    (heap- allocated: is deleted       )
+a method called DESTRUCTOR runs.
+1. dtor body runs
+2. fields' dtors (if there are any) are called in REVERSE DECLATION order
+3. Space deallocated 
+
+Classes come with a dtor (just calls dtors for all fields that are objects)
+
+When do we need to write one?
+Node *np = new Node {1, new Node{2, new Node {3, nullptr}}};
+If np goes out of scope - the ptr is reclaimed (stack-allocated)
+			- entire LIST is leaked.
+If we say delete np; -called *np's dtor, which does nothing
+
+Memory: STACK      HEAP
+	n[]-------->[1|]--->[2|]---->[3|/]
+	^	     ^freed when delete
+	|	
+	freed when scope ends
+Write a dtor to ensure the whole list is freed:
+struct Node {
+	...
+	~Node (){delete next;} //deleting nullptr does nothing! ie: safe
+		  ^recursively calls *next's dtor
+		  -> whole list deallocated.
+};
+Now, delete np; frees the whole list.
+
+-->DTors are the best thing about C++
+
+==============COPY ASSIGNMENT OPERATOR==============
+
+Student billy {60,70,80};
+Student jane = billy; //copy ctor
+Student joey; // default ctor 0,0,0
+joey = billy; // copy, but NOT construction!
+     ^copy-assignment operator
+          -uses compiler supplied default (shallow)
+	  -may need to write our own
+struct Node {
+	...
+	Node &operator= (const Node &other){
+      //^----^
+	//return Node & so that cascading works
+	data = other.data;
+	delete next;
+	next = other.next? new Node {*other.next}: nullptr;
+	}
+	//DANGEROUS!
+};
+
+Why?
+Node n {1, new Node {2, new Node{3, nullptr}}};
+n = n;  -deletes n & then tries to copy n to n
+	-undefined behavior
+*p = *q;
+a[i]=a[j];
+When writing operator '=', ALWAYS make sure it works for self-assignment.
+
+FIX:
+struct Node {
+	...
+	Node &operator = (const Node &other){
+		if (this == &other ) return *this;
+		// Proceed as before.
+	}
+};
+

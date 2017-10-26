@@ -1,0 +1,188 @@
+LECTURE NOTES: 3 OCT 2017
+
+Recall:
+
+Node *np = new Node;
+...
+delete np;
+
+Arrays: 
+int *p = new int [40];
+...
+delete [] p;
+
+
+========= CLASSES ==========
+
+-can put functions inside of structs
+
+eg: struct Student{
+	inst assns, mt, final;
+	float grade(){
+		return assns * 0.4 + mt * 0.2 + final * 0.4;
+	}
+    };
+
+student s {60,70,80};
+cout << s.grade() << endl;
+
+-> class - a structure type that can contain functions,
+	- c++ has a CLASS keyword - we will see it later
+-> object - an instance of a class
+	function grade - called a MEMBER FUNCTION (or METHOD)
+
+WHAT DO ASSNS, MT, FINAL mean inside of grade(){...} ?
+	- They are fields of the CURRENT obj -  the object upon which the method was called
+
+	eg: Student billy {...};
+	    billy.grade(); <-uses billy's assns, mt, final Formally: methods take a hidden extra parameter called "this" - pointer to the object upon which the method is called
+	eg: billy.grade() - extra parameter in () this == &billy 
+Can write (but not necessary, and don't get into this habit)
+	struct Student() {
+		...
+		float grade(){
+			return this->assns*0.4 + this->mt *0.2 + this->final * 0.4;
+		}
+	};
+
+===========INITIALIZATION==============
+
+Student billy {60,70,80}
+
+Struct Student {
+	int assns, mt, final;
+	...
+	Student (int assns, int mt, int final){
+		this->assns = assns;
+		this->mt = mt;
+		this->final = final;
+	}
+};
+
+Student billy {60,70,80}; //better
+			// - if a constructor is defined, these "{60,70,80}" are
+			// passed as args to the ctor
+			// - if no ctor has been defined, these initialize the
+			//   individual fields of Student.
+
+CORRECT:
+int x=5;
+string s = "hello";
+int x(5);
+string s("hello);
+ifstream f ("hello.txt"); WRONG: ifstream f="hello.txt; In 2010: Student billy (60,70,80); //ctor call Student billy {60,70,80}; //c-style only
+int a[5] = {1,2,3,4,5}
+
+
+====ADVANTAGES OF CTORS: default params, overloading, sanity checks=========
+
+eg: struct Student{
+	...
+	Student(int assns=0, int mt=0, int final=0){
+		this->assns=assns;
+		//etc
+	}
+};
+
+Student jane {70,80}; //70,80,0
+Student newkid; //0,0,0
+
+	NOTE: Every class comes with a built-in default ctor.
+	(i.e. takes no arguments)
+	(which just default-constructs all fields that are objects)
+	
+	Eg: Vec v; //default ctor (does nothing in this case)
+	But the built-in default ctor goes away if you provide any ctor
+
+	Eg: struct Vec {
+		int x,y;
+		Vec (int x, int y){
+			this->x=x;
+			this->y=y;
+		}
+	};
+	...
+	-> Vec v; 
+	->      ^ Error! No default ctor
+
+	Vec v {1,2}; //OK!
+
+What if a struct contains constants or refs?
+
+struct MyStruct{
+	const int myConst; // These must be initialized
+	int &myRef; 
+};
+
+// so let's initialize it!
+int z;
+struct MyStruct {
+	const int myConst =5;
+	int &myRef = z;
+};
+
+But does every instance of myStruct need to have the SAME value of myConst?
+
+Eg: Struct Student{
+	const int id;
+	... // const (doesn't change), but not the same for all students
+    };
+
+Where do we initialize? -ctor body?
+			-too late - fields must be fully constructed by then
+
+When an object is created:
+1. Space is allocated (whether from stack/heap)
+2. Fields are constructed in declaration order
+3. Ctor body runs
+=> Goal: need to put our initializations in step 2.
+	How?
+	-Member initialization list (MIL)
+	
+	struct Student{
+		const int id;
+		int assns, mt, final;
+		...
+		Student (int id, int assns, int mt, int final):
+			id {id}, assns {assns}, mt {mt}, final {final} {}
+			// first "id" "assns" etc has to be fields
+			// the "id", "assn"s in {} are parameters
+	};
+
+Note: can initialize ANY field this way, not just consts & refs
+
+struct Student{
+	string name;
+	Student(string name){
+		this->name=name;
+	}
+};
+
+-> name is default-constructed to "" in step 2, then reassigned to "..." in step 3
+Student (string name): name {name} {}
+-> name is initialize once to "..." in step 2
+
+
+Note: Fields are initialized in the order in which they are declared in the class, even if 
+	the MIL orders them differently
+	Embrace the MIL!!!
+	What if a field is initialized inline AND in the MIL?
+
+	struct Vec{
+		 int x=0, y=0; // only happens if the field is not mentioned in the MIL
+		Vec(int x): x{x} {} // MIL takes precedence 
+	};
+
+Now consider:
+Student billy{60,70,80};
+student boddy = billy; // How does this initialization happen?
+			// Ans: the COPY CONSTRUCTOR
+			// - for constructing one object as a copy of another
+Note: Every class comes with:
+	- a default ctor (default constructs all fields that are object)
+		-> lost if you write any ctors
+	- copy ctor (just copies all fields)
+	- copy assignment operator
+	- destructor
+	- move ctor
+	- move assignment operator

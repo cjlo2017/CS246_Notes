@@ -1,0 +1,220 @@
+LEC 20171024
+
+Recall: accessors & mutators
+
+	class Vec{
+		int x,y;
+		public:
+			int getX() const {return x;} //accessor
+			void setY(int z){ y = z;} //mutator
+	};
+
+What about operator << ? 
+	-needs x, y, but can't be a member function
+	-if getX, getY defined, OK
+	-if not - make operator<< a friend function:
+	class Vec{
+		...
+		friend ostream& operator<<(ostream &out, const Vec &v);
+		// this is a standalone function, not a member "friend" keyword
+	};
+	
+	.cc file:
+	ostream& operator<<(ostream &out, const Vec &v){
+		return out << v.x << ' ' << v.y;
+	}
+
+========STATIC FIELDS & METHODS=========
+What if we want to track the # of times a method is ever called,
+  or the number of Students created?
+
+Static members - associated with the class itself, not with any specific instance (object)
+
+Note:
+- static can mean "at compile time" != dynamic "at runtime"
+- one more that I missed
+- you can only use the function in that file
+
+struct Student{
+	...
+	static int numInstances; // static fields must be defined external to the class
+	Student(...): ... {
+		++numInstances;
+	}
+};
+	-2 problems:
+		-numInstances is not initialized
+		-does numInstances exist? Cuz memory is assigned when an object 
+		 is created, and numInstances will be created over and over again with all
+		 #include-s
+	Sol'n:
+	.cc file:
+	int Student::numInstances = 0;
+
+	reminder: a class is also a scope mechanism, int Student::numInstances is just
+		 a global variable with scope inside Student
+
+Static member f'ns:
+	-don't depend on a specific instance of the class (no THIS parameter)
+	-you can only access static fields & call other static functions
+	
+	-eg:
+	struct Student{
+		...
+		static int NumInstances;
+		...
+		static void print NumInstances(){
+			cout << numInstances<< endl;
+		}
+	};
+	int Student::numInstances = 0;
+	Student billy {60,70,80};
+	Student jane {70,80,90};
+	Student::printNumInstances();
+	// 2
+
+========SYSTEM MODELLING===========
+Building an OO system involves planning
+	-identify abstractions
+	-relationship among items
+
+Diagramming standard: UML (Unified Modelling Language)
+-modelling a class
+	Sections(draw a box with 3 sections):
+		1.Name
+		2.Fields(optional)
+		3.Methods(optional)
+	Visibility:
+		-: private
+		+: public
+Relationship: Composition of classes
+	class Vec{
+		int x,y,z;
+		public:
+		Vec(int x, int y, int z):
+			x{x}, y{y}, z{z} {}
+	};
+
+	-Two Vecs define a plane
+	class Plane{
+		Vec v1,v2;
+		...
+	};
+	Plane p; // -can't compile, because it can't initialize v1,v2
+		 // -no default ctor for Vec
+
+	Take advantage of step 2 in ctor:
+	class Plane {
+		vec v1, v2;
+		public:
+		Plane(): v1 {1,0,0}, v2 {0,1,0} {}
+	}; 		//^ initialize v1 to Vec{1,0,0}
+
+	Embedding one obj (Vec) inside anther (Plane) is called COMPOSITION
+	Relationship between Plane & Vec called a "owns a"
+	A Plane OWNS two Vec objects
+
+	If A OWNS a B, then TYPICALLY:
+		-B has no identity outside A - no independent existence
+		-If A is destroyed, then B is destroyed
+		-If A is copied, then B is copied (deep copy)
+	eg:
+	-a car owns four wheels - a wheel is part of a car
+	-destroy a car -> destroy the wheels
+	-copy a car -> copy the wheels
+
+	Implementation - USUALLY as composition of classes
+	Modelling in UML:			v1,v2 
+				[Plane] <*>-------->[Vec] 
+						2
+				A <*>--------------> B
+				-means A owns some # of Bs
+		-Can annotate with field multiplicities, field names
+
+Aggregation ("has a") relationship:
+	Compare:
+		-car parts in a car ("owns a"), vs
+		-car parts in a catalogue.
+	The catalogue contains the parts, but the parts have an independent existence
+	-this is a "has a" relationship (aggregation)	
+
+	If A "has a" B, then TYPICALLY
+		-B has an existence apart from its association with A
+		-If A is destroyed, B lives on
+		-If A is copied, B is not (shallow copy) -copies of A share the same B
+	eg: Ducks in Pond
+	
+	Typical Implementation: 
+	class Pond{
+		Duck *ducks[maxDucks];
+		...
+	};
+
+	UML:
+	[Pond]< >------------->[Duck]
+			     0..*
+
+IMPORTANT: THERE ARE 3 IMPORTANT TOPICS THAT WILL DETERMINE HOW WELL YOU DO IN THIS COURSE
+	1. References
+	2. Heap & stack
+	3. OWNERSHIP 
+
+
+==========SPECIALIZATION (INHERITANCE)==========
+Suppose you want to track your collection of Books
+
+	class Book{
+		string title, author;
+		int numPages;
+		public:
+			Book(...);
+			...
+	};
+
+	For textbooks - also topic:
+	class Text{
+		string title, author;
+		int numPages;
+		string topic;
+		public:
+			Text(...);
+	};
+	For comicbooks - hero
+	class Comic{
+		string title,author;
+		int numPages;
+		string hero;
+		public:
+			Comic (...);
+	};
+-this is OK, does not capture the relationships among the classes
+-How do we create an array (or list) that contains a mix of these?
+COULD:
+	1. union BookTypes {Book *b; Text *t; Comic *c;};
+	   BookTypes myBooks[20];
+	   // array of pointers of the same size
+	   // each field is pointing to one of book,text or comic
+		-note union does not know which one pointer type is it,
+		 if used inconsistently, will return garbage when dereferenced incorrectly
+	2. Array of void*
+	Note: (1) and (2) are not type-safe
+	BUT texts & comics are kinds of Books - Books with special features
+C++ - model by INHERITANCE:
+	class Book{
+		string title, author;
+		int numPages;
+		public:
+			Book(...);
+	};
+	class Text: public Book{
+		string topic;
+		public:
+			Text(...);
+	};
+	class Comic: public Book{
+		string hero;
+		public:
+			comic(...);
+	};
+	-note: Book is a base class (or superclass)
+	-note: Text, comic are derived classes (or subclasses)
