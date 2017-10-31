@@ -1,0 +1,176 @@
+LEC 31 OCT 2017
+
+====DESTRUCTORS(with inheritance)=====
+class X{
+	int *x;
+	public:
+		X (int n): x {new int [n]}{}
+		~X() {delete [] x;}
+};
+class Y: public X{
+	int *y;
+	public:
+	Y(int m,int n): X{n}, y{new int[m]}{}
+	~Y() {delete [] y;} 
+	//shouldn't delete X - Y's dtors will call X's dtors (step 3)
+};
+
+X * myX = new Y {5,10};
+delete myX; --leaks, why?
+// Calls ~X, but not ~Y, so only X but not Y, is freed
+
+How can we ensure that deletion through a superclass ptr will call the subclass dtor?
+-make the dtor VIRTUAL
+
+class X{
+	...
+	public:
+		...
+		virtual ~X(){delete [] x;}
+};
+
+ALWAYS - make the dtor virtaul in classes that are meant to have subclasses
+	-even if the dtor doesn't do anything (you have no idea what subclasses are like)
+
+If a class is NOT meant to have subclasses, declare it FINAL.
+class Y final: public X{...}
+	-in other words, you can't say "subclass of Y"
+	-final: "a contextual keyword"
+	-when it appears in between class, it is a keyword
+	-otherwise it is a variable
+	-override is another "contextual keyword"
+
+========Pure Virtual Methods & Abstract classes=========
+class Student{
+	public:
+		virtual float fees();
+};
+
+// 2 kinds of students: Regular & Coop
+class Regular: public Student{
+	public:
+		float fees() override;	
+		// regular students' fees
+}
+class Coop: public Student{
+	public:
+		float fees() override;
+		// co-op students' fees
+}
+What should we put for Student::fees?
+	-Not sure - every Student should be either Regular or Coop 
+
+Can explicitly give Student::fees NO implementation:
+	class Student{
+		...
+		public:
+			virtual float fees() = 0;
+			// C++ creators are reluctant to creating new keywords
+			// Method has no (*) implementation
+			// this is called a PURE VIRTUAL METHOD
+	};
+	
+	-A class with a pure virtual method cannot be instantiatied
+	Student s; // WON'T COMPILE
+	-these are called abstract classes
+	-purpose is to organize subclasses
+
+Student *p = new Regular; // CORRECT!
+
+Subclasses of abstract classes are also abstract, UNLESS they implement all pure virtual methods.
+
+Non-abstract classes - called CONCRETE
+
+======Representation in UML=======
+UML 	-virtual & pure virtual methods: italics (cursive when writing)
+	-abstract classes - class name in italics
+	-STATIC
+
+======Inheritance and Copy/Move=====
+class Book{
+	...
+	public:
+		// defines copy/move ctor/assn
+};
+class Text: public Book{
+	string topic;
+	public:
+		... 
+		// does not define copy/move operations
+};
+
+Text t {"Algorithms", "CLRS", 50000, "CS"};
+Text t2 = t; //No copy ctor in Text - what happens?
+	-calls Book's copy ctor
+	-then goes field-by-field (default behavior) for the Text part
+	-same for other operations
+
+To write your own operations:
+	Text:: Text(const Text &other): Book{other}, topic {other.topic}{}
+	Text & Text::operator=(const Text &other){
+		Book::operator=(other);
+		topic = other.topic;
+		return *this;
+	}
+	Text::Text(Text &&other): 
+			  ^REFERS TO an rvalue, but is an lvalue
+		Book{std::move(other)}, //other is an lvalue, the copy ctor is run without casting
+		topic{std::move(other.topic)}{}
+		
+	-Note: even though other/other.topic refer to rvalues, they themselves are lvalues
+	 and std::move(x) forces an lvalue x to be treated as an rvalue, so that the "move"
+	 version of the operations run
+
+	Text & Text::operator=(Text &&other){
+		Book::operator=(std::move(other)); // using the move operation for Book
+		topic = std::move(other.topic); // using the move operation for strings
+		return *this;
+	}
+	
+	-NOTE: these op'ns are equivalent to built-in
+	-specialize as needed for Node, etc
+
+Now consider the following:
+	Text t1 {...}, t2 {...};
+	Book *pb1 = &t1, *pb2 = &t2;
+	
+	-What if we do
+		*pb1 = *pb2;
+	-It is Book::operator= that runs
+	-PARTIAL ASSIGNMENT - copies only the book part
+
+How can we fix it? Defining operator= virtual
+	class Book{
+		...
+		public:
+			virtual Book &operator=(const Book &other){...}
+	};
+	class Text: public Book{
+		...
+		public:
+					      v fix: change Text to Book // then it will compile
+			Text &operator=(const Text &other) override {...} //WON'T COMPILE
+	};	
+	Note: different return types, but PARAMETER types must be the same, 
+	      or it's not an override(and won't compile)
+	-violates "is a"
+
+	Assignment from a book to a Text is allowed
+	Text t;
+	t = Book {...}; //correct
+	// uses a Book to assign a Text - BAD
+
+	t = Comic {...}; REALLY BAD
+
+If operator= is non-virtual - partial assignment through base class ptrs
+If operator= is virtual	- compiler allows mixed assignment
+-BOTH ARE BAD
+
+RECOMMENDATION: all superclasses should be ABSTRACT
+
+		[abstract Book] // note that this has italics font
+			^
+			|
+	---------------------------------
+	|		|		| 
+	[Normal Book]   [Comic]		[Text]
