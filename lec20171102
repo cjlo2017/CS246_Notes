@@ -1,0 +1,183 @@
+LEC 20171102
+
+Recall *pb1 = *pb2; //Book ptrs pting at text objects
+
+If operator = non-virtual - partial assignment
+		virtual - mixed assignment
+
+Recommend: all superclasses abstractt
+
+		[AbstractBook]
+		       ^
+		       |
+	--------------------------------
+	|		|		|
+	[Normal Book]	[Text]		[Comic]
+
+	class Abstract Book{
+		string title, author;
+		int numPages;
+		protected:
+			// prevents assignment through base class ptrs from compiling, 
+			// but implementation available to subclasses
+			AbstractBook &operator=(const AbstractBook &other);
+			virtual ~AbstractBook() = 0; // Need at least one pure virtual method.
+							if you don't have one, use the dtor
+	};
+	class NormalBook: public AbstractBook {
+		public:
+			NormalBook(...);
+			~NormalBook();
+			NormalBook &operator=(const NormalBook &other){
+				Abstractbook::operator=(other);
+				return *this;
+			}
+	};
+
+	-other classes - similar
+	-here are some ptrs to AbstractBook
+	*pub1 = *pub2;
+	-protected: prevents assignment through base class ptrs from compiling, 
+	 but implementation available to subclasses
+
+	-**note: a virtual dtor MUST be implemented, even if its pure virtual**
+	-**Step (3) - subclasses dtor will call it, so it must exist**
+
+Fun Note: we have reached the top of the "C++ rollercoaster", we are going to crest!!!
+
+=========TEMPLATES=========
+Huge topic - just the highlights here
+
+class List{
+	struct Node;
+	Node *theList
+	...
+};
+struct List::Node{
+	int data;
+	Node *next;
+};
+
+What if you want to store something else? Whole new class?
+
+OR - a template - a class parameterized by a type
+	template <typename T> class List{
+		struct Node;
+		Node *theList;
+		public:
+			class Iterator{
+				Node *p;
+				public:
+					...
+					T &operator *();
+					...
+			};
+			...
+			T ith(int i);
+			void addToFront(T n);
+			...
+	};
+
+	template <typename T> struct List<T>::Node{
+		T data;
+		Node *next;
+	};
+
+	template <typename T> class Stack{
+		int size cap;
+		T *theStack;
+		public:
+			Stack(...);
+			void push(T x);
+			T top();
+			void pop;
+	}
+
+	Client:
+	List <int> l1;
+	List <List <int>> l2;
+	l1.addToFront(3);
+	l2.addToFront(l1);
+
+	Looping:
+	for (List <int>)::Iterator it=l1.begin(); it!=l1.end(); ++it){
+		cout << *it << endl;
+	}
+	Or indeed:
+	for (auto n: l1) cout<< n << endl;
+	
+	Compiler specializes templates at the source code level, before compilation
+	(ie: the compiler writes the new classes for you)
+
+=======The Standard Template Library (STL)============
+Large # of useful templates in the C++ library
+
+Eg:
+	-dynamic length arrays: VECTORS
+	#include <vector>
+	using namespace std;
+	
+	vector <int> {4,5}; //4,5
+	v.emplace_back(6);
+	v.emplace_back(7); //4,5,6,7
+
+	-note: {} is not equal to ()
+	vector <int> v(4,5); // 5,5,5,5
+
+	Looping:
+		for (int i=0; i<v.size(); ++i){
+			cout << v[i] << endl;
+		}
+			v auto	  v lower case 'i'
+		for (vector<int>::iterator it = v.begin(); it!= v.end(); ++it){
+			cout << *it << endl;
+		}
+	OR:
+		for (auto n: v){
+			cout << n << endl;
+		}
+
+	To iterate in reverse:
+		for(vector<int>::reverse iterator it = v.rbegin(); it!=v.rend(); ++it){
+			...
+		}	
+	
+	v.pop_back(); //remove last element
+
+	Use iterators to remove items from inside a vector
+	-it returns an iterator pointing at the point of erasure
+	eg:
+		auto it = v.erase(v.begin()); //erase item 0
+		it = v.erase(v.begin()+3); //erase item 3
+		it = v.erase(it); // erase next item
+		it = v.erase(v.end() -1); // erase last item
+
+	v[i] - ith element
+	   ->unchecked - if you go out of bounds, undefined behavior
+	v.at(i) - checked version of v[i]
+	   -> What happens when we go out of bounds?
+
+	PROBLEM - vector's code can detect the error 
+		- but doesn't know what to do about it
+		- client can respond, but the client can't detect the error
+
+	C-Solution - functions return a status code or
+		   - set the global variable errno
+		-> leads to awkward programming
+		-> "errno" encourages programmers to ignore error-checks
+
+	C++ - in error cases the function RAISES AN EXCEPTION (baseball analogy)
+		-by default, execution stops (intentional crash) 
+		-but we can write handlers to CATCH exceptions & deal with them
+		"vector<T>:: at throws std::out_of_range" when it fails
+
+	#include <stdexcept>
+	...
+	try{ // what to do if no error - code that COULD throw
+		cout << v.at(10000) << endl;
+	}
+	catch (std::out_of_range theExn){
+		^ type		 ^ object that was thrown
+		 cerr << "Range error" << endl;
+	}
+	cout << "Carry on" << endl;
