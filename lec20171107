@@ -1,0 +1,182 @@
+LEC 20171107
+Recall:
+#include <stdexcept>
+...
+try{
+	cout << v.at(10000) << endl;
+}
+catch (std::out_of_range ex){
+	cerr << "Range error" << ex.what() << endl;
+}
+-exception object thrown is like a baseball, either one catches it -catch(SomeErrorType), or it dive 
+
+Now consider:
+	void f(){
+		throw out_of_range {"f"};
+	}
+	void g(){ f();}
+	void h(){ g();}
+
+	int main(){
+		try{ h();}
+		catch(out_of_range){...}
+	}
+	-What happens?
+		-main calls h
+		-h calls g
+		-g calls f
+		-f throws out of range
+		-g has no handler for out of range
+	-control goes back through the call chain (UNWINDS the stack) until
+	 a handler is found
+	-all the way back to main; main handles it.
+	-if no handler found in the entire call chain, program terminates
+
+	-out_of_range is a class
+	throw out_of_range {"f"}; // "f" is auxiliary info for what()
+	      ^^^^^^^^^^^^^^^^^^
+		ctor call
+	-A handler might do part of the recovery job_execute some corrective code,
+	 & throw another exception
+	try {...}
+	catch(SomeErrorType s){
+		...
+		throw SomeOtherError {...};
+	};
+	-or throw the same exception:
+	try {...}
+	catch (SomeErrorType s){
+		...
+		throw; // throw; or throw s;
+	}
+	-"throw;" vs "throw s;"
+	  ^             ^   ^
+	  |      	|   could be a subclass of SomeErrorType
+          |		rethrows a new exn of type SomeErrorType
+	  throw the exact ex that was thrown at you -type info is retained
+
+	[SomeErrorType]
+	       ^
+	       |
+	[SomeErrorType]
+
+	-A handler can act as a catch-all
+	try{~~~}
+	catch(...) { // "..." here is diabolical  (C: not to check the arguments)
+		//sth
+	}
+
+	-Note: exceptions are much slower than functions
+		-think about recursive fibonacci and exception fibonacci example
+
+	-You can throw anything you want - don't even have to throw objects
+
+Define your own exception classes for errors:
+	eg:
+	class BadInput {};
+	...
+	try {
+		int n;
+		if(!(cin>>n)) throw BadInput{};
+		......
+	}
+	catch (BadInput &){ //catch by reference
+				-reduces copying; avoids slicing
+		cerr << "Input not well formed";
+	}
+
+	-Some notes on Standard exceptions
+		-length_error - attempting to resize a vector/string too big
+		-bad_alloc - new fails
+		
+	-NEVER let a dtor throw an exception
+		-If a dtor throws - program terminates immediately, unless
+		 the dtor was tagged noexcept(false)
+		-If a dtor can & does throw, what would happen?
+			-if that dtor was executed during stack unwinding while
+			 dealing with another exception that is still looking for 
+			 a handler, you now have TWO active unhandled exns, and the
+			 program WILL abort IMMEDIATELY (std::terminate will be 
+			 called)
+	-much more on exceptions later
+
+
+=======DESIGN PATTERNS CONTINUED=======
+Guiding principle - program to interface, not the implementation
+	-abstract base classes define the interface
+	-work with ptrs to abstract base classes & call their methods
+	-concrete subclasses can be swapped in & out
+		-abstraction over a variety of behavior
+
+eg:
+	-Iterator pattern
+	class List{
+		...
+		public:
+			class Iterator{
+				...
+			};
+	};
+	class Set{
+		...
+		public:
+			class Iterator{
+				...
+			};
+	};
+
+	What if we want to create a function that prints elements of a list/set?
+	-but we do not want to do the same thing twice
+	-also noticed that the two iterators are very similar
+	-Sol'n: abstract class
+	class AbstractIterator{
+		public:
+			virtual int &operator*()=0;
+			virtual AbstractIterator &operator++()=0;
+			virtual bool operator=(const AbstractIterator &other) const =0;
+			virtual ~AbstractIterator();
+	};
+
+
+	Then you can write code that operates over iterators:
+	void for_each(AbstractIterator &start,
+			AbstractIterator &end,
+			void (*f)(int)){
+		while(start!=end){
+			f(*start);
+			++start;
+		}
+	}
+	-works over Lists and Sets
+
+======Observer Pattern=======
+Publish-subscribe model
+	One class: publisher/subject -generates data
+	One or more subscriber/observer classes - receives data & react to it
+
+	eg:
+	-publisher = spreadsheet cells; observers = graphs
+		-when cells change, graphs update
+	-there can be many different kinds of observer objects
+	-subject should not need to know all the details
+
+Observer pattern:
+	code common to all subjects		interface common to all observers
+	v					v
+	[ <i>Subject</i>  ]<>---------->[<i>Observer</i>]
+	[+notifyObserver()]		[+notify()      ]
+	[+attach(Observer)]			^
+	[+detach(Observer)]			|
+	 ^					|
+	 |					|
+	[ConcreteSubject ]<-----------<>[ConcreteObserver]
+	[+getState()     ]		[+notify()       ]
+	[(getState(?)    ]
+			
+	Sequence of method calls:
+	1-Subject's state changes
+	2-Subject::notifyObservers() called (either by the subject itself, or
+	  by an external controller)
+	3-Each observer calls Concrete::getState to get the new state & reacts 
+	  appropriately
+		
