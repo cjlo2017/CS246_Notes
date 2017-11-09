@@ -1,0 +1,197 @@
+LEC 20171109
+
+Example: Horse Race
+	Subject - publishes winners
+	Observers - individual bettors
+		  - declare victory when theri horse wins
+
+
+	class Subject{
+		vector<Observer *>observers;
+		public:
+			void attach(Observer *ob){observers emplace_back(ob);}
+			void detach(Observer *ob; //remove from observers;
+			void notifyObservers(){
+				for(auto &obj:observers) ob->notify();
+			}
+			virtual ~Subject()=0;
+	};
+
+	Somewhere:
+	Subject::~Subject(){}
+
+	class Observer{
+		public:
+			virtual void notify()=0;
+			virtual ~Observer();
+	};
+	-note: the above classes are general purpose
+
+	class HorseRace:public Subject{
+		ifstream in; //source of winners
+		string lastWinner;
+		public:
+			HorseRace (string source): in {source}{}
+			bool runRace(){
+				return in >> lastWinner? true: false; //there is an implicit conversion to bool
+			}
+		string getState(){
+			return lastWinner;
+		}
+	};
+
+	class Bettor: public Observer{
+		HorseRace *subject;
+		string name, myHorse;
+		public:
+			Bettor(...): ...{
+				subject->attach(this);
+				//regeister with subject, or else you will not be notified
+			}
+			~Better(){ subject->detach(this); }
+			//do not delete *subject here!!!
+			void notify(){
+				string winner = subject->getState();
+				if(winner==myHorse) cout <<"Win!"<< endl;
+				else cout<< "Lose :-(" << endl;
+			}
+	}
+	
+	main:
+	HorseRace hr{"file.txt"};
+	Bettor Larry{&hr, "Larry", "RunsLikeACow"};
+	... (other bettors)
+	while(hr.runRace()){
+		hr.notifyObservers();
+	}
+
+
+======DECORATOR Pattern======
+Want to enhance an object at runtime - add functionality/features
+Eg:  Windowing system
+	-start off with a basic window
+	-add scrollbar
+	-add menu
+
+Want to choose these enhancements at runtime.
+
+Decorator pattern:
+
+	[<i>Component</i> ] (windows interface)<---------------------------------
+	[+<i>Operation</i>]							|
+		^								|
+		|------------------------------------------------		|
+		|						|		|
+	[ConcreteComponent] (basic window)		[<i>Decorator</i>]<>----|
+	[+Operation       ]					|	
+						|---------------|-----------------|
+					[ConcreteDecoratorA]		[ConcreteDecoratorB]
+					[+Operation	   ]		[+Operation	   ]
+	
+
+	Class Component - defines the interface -operations your objects wil provide
+	Concrete object - implements the interface
+	Decorators - all inherit from Decorator, which inherits from component
+	->therefore: Every decorator IS a component, AND every Decorator HAS a component
+
+	Eg: 
+	-Windows with scroller is a kind of window, and HAS a pointer to the underlying plain window	
+	-Window w/ scrollbar & menu IS a window, and HAS a ptr to window with scrollbar, which has a pointer to
+	 a plain window
+	-All inherit from abstract Window, so window methods can be used polymorphically on all of them
+
+	Eg: PIZZA
+	[<i>Pizza</i>] 
+		^
+		|   (Basic Pizza is crust and sauce)
+		|
+	[CrustAndSauce]	
+
+	class Pizza{
+		public:
+			virtual float price() const = 0;
+			virtual string desc() const = 0;
+			virtual ~Pizza()=0;
+	};
+	class CrustAndPizza: public Pizza{
+		public:
+			float price() const override{return 5.99};
+			string desc() const override{return "Pizza"};
+	};
+
+	
+	[<i>Pizza</i> ] (windows interface)<-------------------------------------
+										|
+		^								|
+		|------------------------------------------------		|
+		|						|		|
+	[CrustAndPizza] (basic window)			[<i>Decorator</i>]<>----|
+								|	
+						|---------------|-----------------|
+					[StuffedCrust]	    [Topping]		[DippingSauce]
+
+	class Decorator: public Pizza{
+		protected:
+			pizza *component;
+		public:
+			Decorator(Pizza *p): component{p}{}
+			~Decorator(){delete component;} //toppings are stuck to pizza after adding it
+	};
+
+	class StuffedCrust:public Decorator{
+		public:
+			StuffedCrust(Pizza *p): Decorator {p}{}
+			float price() const override{ return component->price()+2.69;}
+			string desc()const override{return component->desc()+"with stuffed crust";}
+	};
+	class Topping: public Decorator{
+		string theTopping;
+		public:
+			Topping(string Topping, Pizza *p): Decorator{p}, theTopping{topping}{}
+			flaot price() const override{return component->price()+0.75;}
+			string desc() const override{return component->desc()+"with "+theTopping;}
+	};
+	Use:
+	Pizza *p1 = new CrustAndSauce;
+	p1 = newTopping("Cheese",p1);
+	p1 = newTopping("Mushrooms",p1);
+	p1 = new StuffedCrust(p1);
+	cout << p1->desc() << ' ' << p1->price();
+	delete p1;
+
+
+========Factory Method Pattern(Virtual CTor Pattern)==========
+Write a video game with 2 kinds of enemies: turtles & bullets
+	-system randomly sends turtles and bullets, but bullets become more frequent in harder levels
+
+	[<i>Enemy</i>]				[<i>Level</i>]
+		^					^
+		|					|
+	   |-----------------------|		   |--------------|
+	[Turtle]		[Bullet]	[Easy] 		[Hard]
+
+	-never know which enemy comes next, so can't call turtle/bullet ctors directly
+	-Instead, put a factory method inside Level that creates Enemies
+
+	class Level{
+		public:
+		virtual Enemy *createEnemy()=0;
+				^factory method
+	};
+	class Easy:public Level{
+		public:
+			Enemy *createEnemy() override{
+				//create mostly turtles
+			}
+	};
+	class Hard:public Level{
+		public:
+			Enemy *createEnemy() override{
+				//mostly bullets
+		}
+	};
+
+	Level *l=new Easy;
+	Enemy *e = l->createEnemy();
+	
+**Next time: Template method pattern
