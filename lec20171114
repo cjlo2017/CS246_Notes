@@ -1,0 +1,204 @@
+LEC 20171114
+
+======TEMPLATE METHOD PATTERN=======
+	-want subclasses to override superclass behavior, but some aspects must stay the same
+	-eg: There are red turtles and green turtles
+	class Turtle{
+		public:
+			void draw(){ // like a fill-in-a-form 
+				drawHead(); // same for both red and green
+				drawShell(); // only difference is this
+				drawFeet(); // same for both red and green
+			}
+		private:
+			void drawHead(){...}
+			void drawFeet(){...}
+			virtual void drawShell()=0;
+	};
+	class RedTurtle: public Turtle{
+		void drawShell() override{/*draw red shell*/}
+		// even though they cannot access Turtle::drawShell(), they can override it
+	};
+	class GreenTurtle: public Turtle{
+		void drawShell() override{/*draw green shell*/}
+		// even though they cannot access Turtle::drawShell(), they can override it
+	};
+	
+	-subclasses cannot change the way a turtle is drawn (head, shell, feet)
+	 but can change the way the shell is drawn
+			
+======Generalization - the Non-virtual interface (NVI) idiom======
+	-a public virtual is really two things:
+		-public: interface to client - indicates provided behavior with pre/post conditions
+		-virtual: an interface to the subclasses
+			-a "hook" to insert specialized behavior
+
+		-it is hard to separate these ideas, if they are tied to the same functions
+
+	-what if you want to "split" a virtual method into two, without affecting the client?
+	-how can you make sure overriding functions respect the pre/post conditions?
+
+	NVI idiom: 
+		-ALL public methods should be NON-VIRTUAL
+		-all virtual methods should be non-public (private/protected)
+		-(expect for the destrutor of course)
+
+	-eg:
+	class DigitalMedia{
+		public:
+			virtual void play()=0;
+	};
+	=>CHANGE IT TO:
+	class DigitalMedia{
+		public:
+			void play(){
+				// can add before code here: eg: update Play counts
+				doPlay();
+				// can add after code here
+			}
+		private:
+			virtual void doPlay()=0;
+	};	
+
+	-Generalized Template method - puts EVERY virtual method inside a template method
+
+<--take a break from design patterns-->
+
+======STL map - for creating dictionaries======
+	-eg: "arrays" that map strings to ints
+	#include <map>
+	using namespace std;
+	map<string,int> m;
+	m["abc"]-1;
+	m["def"]=4;
+	cout << m["ghi"]; 
+	// 0 - if key is not present, it is inserted & value is default-constructed
+	// for ints, 0
+	cout << m["abc"]; //1
+	m.erase("abc");
+
+	-what if you wanna ask if a key is in a map?
+	if(m.count("def")); //0=not found, 1=found
+	-the reason for count is there's a class called "multimap" where a key can appear
+	 multiple times, so it makes sense to ask the question count
+	-Iterating over a map - results are presented in sorted key order (cuz a map is usually implemented as a BST)
+	for(auto &p:m){ // p is a std::pair<key,value> it is in <utility>
+		cout << p.first << ' ' << p.second; // not a method call, because pair is not invariant
+	};
+	-convention: when someone implements something as a struct, that data structure has no invariants,
+	 it is just a package of data and no invariants
+
+	<utility>
+	std::pair<key,value> p;
+	p.first = //first element
+	p.second = //second element
+
+======VISITOR PATTERN======
+	-For implementing DOUBLE DISPATCH
+	-virtual methods 
+		-chosen based on the actual type (at runtime) of the object being called
+	-What if you want to choose based on TWO methods?
+
+	-Eg:
+
+	[<i>Enemy</i>]
+	^
+	|_______________________
+	|			|
+	[Turtle]		[Bullet]
+	
+	[<i>Weapon</i>]
+	^
+	|_______________________
+	|			|
+	[Stick]			[Rock]
+
+	-strike an enemy with a weapon
+	-Want something like
+	virtual void (Enemy,Weapon)::Strike(){...}
+
+	-If strike virtual on Enemy, choose based on Enemy, but not on Weapon
+	-If strike virtual on Weapon, choose based on Weapon, but not on Enemy 
+
+	-Trick to get dispatch based on both - combination of overriding and overloading
+
+	class Enemy{ //OVERRIDING here
+		public:
+			virtual void beStruckBy(Weapon &w)=0;
+	};
+	class Turtle: public Enemy{
+		public:
+			void beStruckBy(Weapon &w) override {w.strike(*this)}; // *this is a Turtle
+	}
+	class Bullet: public Enemy{
+		public:
+			void beStruckBy(Weapon &w) override {w.strike(*this)}; // *this is a Bullet
+	}
+
+	class Weapon{ //OVERLOADING here
+		public:
+			virtual void strike(Turtle &t)=0;
+			virtual void strike(Bullet &b)=0;
+	};
+	class Stick: public Weapon{
+		public:
+			void strike(Turtle &t) override{
+				//strike turtle with stick
+			}
+			void strike(Bullet &b) override{
+				//strike bullet with stick
+			}
+	};
+	// Rock - similar
+
+	Enemy *e = new Bullet {...};
+	Weapon *w = new Rock {...};
+	e->beStruckBy(*w);   //What happens?
+		-Bullet::beStruckBy runs (virt. method lookup on Enemy)
+		-calls Weapon::Strike, *this is Bullet
+			-therefore: Bullet version chosen at compile time
+		-virtual strike method call resolves to Rock::Strike(Bullet &)
+
+
+-Visitors can be used to add functionality to existing classes without changing or recompiling
+ the classes themselves (can be useful when you can't or don't want to add a virtual method to your class)
+	-eg: add a visitor to the book hierarchy
+	class Book{
+		public:
+		...
+		virtual void accept(BookVisitor &v){v.visit(*this);}
+	};
+	class Text: public Book{
+		public:
+		...
+		void accept(BookVisitor &v) override {v.visit(*this);} // accept is similar to Enemy::beStruckBy
+	};
+	// comic - similar
+	
+	class BookVisitor{
+		public:
+			virtual void visit(Book &b)=0; // visit is similar to Weapon::strike
+			virtual void visit(Text &t)=0;
+			virtual void visit(Comic &t)=0;
+	};
+
+	-Application - track how many of each kind of Book I have
+		-Books - by Author
+		-Texts - by Topic
+		-Comics - by Hero
+		
+		-looks like we could use map<string,int>
+
+		-could add:
+		virtual void addMeToMap(...);
+
+		-Or write a visitor:
+		class Catalogue: public BookVisitor{
+			public:
+				map<string,int> theCatalogue;
+				void visit(Book &b) override {++theCatalogue[b.getAuthor()];}
+				...
+		};
+
+	
+
