@@ -1,0 +1,157 @@
+LEC20171116
+
+======VISITOR PATTERN CONTINUED======
+class Book{
+	public:
+	...
+	virtual void accept(BookVisitor &v){v.visit(*this);}
+	...
+};
+class Text: public Book{
+	public:
+	...
+	void accept(BookVisitor &v) override {v.visit(*this);}
+};
+// Comic - similar
+class BookVisitor{
+	public:
+	virtual void visit(Book &b)=0;
+	virtual void visit(Text &t)=0;
+	virtual void visit(Comic &c)=0;
+};
+class Catalogue: public BookVisitor{
+	public:
+	map<string,int> theCatalogue;
+	void visit(Book &b) override {++theCatalogue[b.getAuthor];}
+	void visit(Text &t) override {++theCatalogue[b.getAuthor];}
+	void visit(Comic &b) override {++theCatalogue[b.getAuthor];}
+};
+
+But it won't compile! Why?
+	-book.h include bookVisitor.h includes text.h includes book.h (won't be reincluded - include guard)
+	-Text does not know what Book is
+	-Are these includes really needed?
+
+======Compilation dependencies - when does a compilation dependency exist?======
+Consider:
+	class A{...}; //a.h
+
+	#include "a.h"
+	class B: public A {...}; //IS-A inheritance
+	-compilation dependency: need to now how big A is to know how big B is
+
+	#include "a.h"
+	class C{ A a;}; //OWNS-A composition
+	-compilation dependency: need to now how big A is to know how big C is
+
+	class A;
+	class D{ A *ap}; //HAS-A aggregation
+
+	class A;
+	class E{ A f(A a;);}; //function: the client is allocating space for the object A, so the client includes "a.h"
+
+	-hint: think about what the compiler tries to do when creating an object(set aside space for the object)
+
+	-If there is no compilation dependency necessitated by the code,
+	 don't create one with extra includes.
+	-When class A changes, only A,B,C need to recompile
+
+	-Now, in the implementation of D,E:
+	
+	d.cc:
+	#include "a.h"
+	void D::f(){ ap->someMethod();} //need to know about class A here - a real compilation dependency
+	-Do the #include in the .cc file, instead of the .h file (where possible)
+
+	
+Now consider the XWindows class:
+	class XWindow{
+		Display *d;			|This is private data
+		Window w;			|Yet we can look at this
+		int s;				|Do we know what it all means?
+		GC gc;				|Do we care?
+		unsigned long colours[10];	|
+		public:
+			...
+	};
+	-What if we add/change a private member? All clients must recompile.
+	-Would be better to hide these details away
+	SOLN: the PIMPL IDIOM ("pointer to implementation")
+		-create a second class XWindowImpl:
+	    XWindowImpl:
+		#include <X11/Xlib.h>
+		struct XWindowImpl{
+			Display *d;
+			Window w;
+			int s;
+			GC gc;
+			unsigned long colours[10];
+		};
+	    window.h:
+		class XWindowImpl;
+		class XWindow{
+			XWindowImpl *pimpl;
+			public:
+				/*no change*/
+		};
+	    window.cc:
+		#include "window.h"
+		#include "XWindowImpl.h"
+		
+		XWindow::XWindow(...):pimpl{new XWindowImpl}, //delete in dtor
+			...
+			{}
+		-Other methods - replace fields d,w,s etc
+		 with pimpl->d, pimpl->w, pimpl->s;
+
+		-If you confine all private fields to XWindowImpl, then only window.cc
+		 needs to recompile if you change XWindow's implementation
+
+======Generalization - What if there are several possible window implementations, eg: XWindow & YWindow======
+	-Then make the Impl structure a superclass
+			(ptr)
+	[window]</>--------------->[WindowImpl]
+					^
+					|
+				+-------+-------+
+				|		|
+				[XWindowImpl]	[YWindowImpl]
+	-note: because the ptr is critical to the design(designed to abstract out the implementation as well as
+	       avoiding unnecessary re-compilation, so mark that the OWNS-A relationship b/t window and WindowImpl
+	       is implemented with a ptr
+	-pimpl idiom with class hierarchy of implementations - called the BRIDGE PATTERN
+
+
+======Measures of Design Quality======
+	-coupling & cohesion
+
+	-coupling: the degree to which distinct program modules depend on each other
+		LOW	-modules communicate via function calls with basic params/results
+		^	-modules pass arrays/structs back & forth
+		|	-modules affect each other's control flow
+		v	-modules share global data //quite nasty
+		HIGH	-modules have access to each other's implementation (ie: friends)
+	-high coupling 	=> changes to one module require greater changes to other modules
+			=> harder to reuse individual modules	
+
+	-cohesion - how closely the elements of a module are related to each other
+		LOW	-arbitrary grouping of unrelated elements (eg: <utility>)
+		^	-elements share a common theme, otherwise unrelated, 
+		|	 perhaps share some base code (eg: <algorithm>)
+		|	-elements manipulate state over the lifetime of an object (eg: open/read/close files)
+		v	-elements pass data to each other
+		HIGH	-elements cooperate to perform exactly one task
+	-low cohesion	=>poorly organized code
+			-hard to understand, maintain, reuse
+
+	-Goal: low coupling & high cohesion
+	
+======Decoupling the interface (MVC)======
+	-your primary program classes should not be printing things
+	-eg:
+	class ChessBoard{
+		...
+		cout << "Your move";
+	};
+	-Bad design - inhibits code reuse
+	-What if you want to reuse ChessBoard, but not have it communicate vai stdout?
