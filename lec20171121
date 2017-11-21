@@ -1,0 +1,168 @@
+LEC 20171121
+
+Recall:
+	class ChessBoard{
+		...
+		cout << "Your move" << endl;
+		...
+	};
+	-bad design - inhibits code reuse
+	-what if you want to reuse ChessBoard but not have it print to stdout
+
+	One solution: 
+	-give the class stream objects where it can send input/output:
+	class ChessBoard{
+		std::istream &in;
+		std::ostream &out;
+		public:
+			ChessBoard(std::istream &in, std::ostream &out):
+				in{in},out{out}{}
+			...
+			out << "your move" << endl;
+			...
+	};
+	-Better -but what if we don't want to use streams at all?
+			-no streams will support graphics
+			-doesn't support other languages
+		-your chessboard class should not be printing at all
+	
+	-Single responsibility principle
+		-"A class should have only one reason to change"
+		-game state, rules, communication strategy - ALL reasons to change
+
+	-Better	-communicate with the chessboard via params/results/exns
+		-confine user communication to outside the game class
+
+	-Q: 	-So should main do all of the communication & then call Chessboard methods?
+	-A: 	-No, hard to reuse code if it's in main
+
+	-We should have a class to manage interaction that is separate from the game state class
+
+======Architecture: Model-View-Controller (MVC)======
+-separate the distinct notions of the data (or state),
+ the presentation of the data, and the control of the data
+
+-MODEL		-the data you are manipulating (eg: game state)
+-VIEW		-how the model is displayed to the user
+-CONTROLLER 	-how the model is manipulated
+	
+-Model 
+	-can have multiple views (eg: text & graphics)
+	-doesn't need to know their details
+	-classic observer pattern (or could communicate through the controller)
+-Controller
+	-mediates control flow between model & view
+	-may encapsulate turn taking, or full game rules
+	-may communicate with the user for input (or this could be the view)
+
+By decoupling presentation & control, MVC supports reuse
+
+======EXCEPTION Safety======
+Consider:
+	void f(){
+		MyClass *p = new MyClass;
+		MyClass me;
+		g();
+		delete p;
+	}
+	-No leaks, but what if g throws?
+	-What is guaranteed?
+	-During stack unwinding, all stack allocated data is cleaned up(destructed)
+	 memory is reclaimed
+	-heap allocated memory is not freed
+	-If g throws, *p is leaked, but mc is not
+	-Fix:
+	void f(){
+		MyClass *p = new MyClass;
+		MyClass mc;
+		try{			|tedious and error prone
+			g();		|-duplication of code
+		}			|
+		catch(...){		|How do we guarantee that something (eg: delete p) will
+			delete p;	|happen, no matter how we exit f?
+		}			|(normally or exn?)
+		delete p;
+	}
+
+	-In some languages: "finally" clauses guarantee certain final actions - not c++
+	
+	-Only thing you can count no in c++ - dtors for stack-allocated data will run
+	-therefore: stack allocated data with dtors as much as possible
+	-use the guarantee to your advantage
+
+	-C++ idiom - RAII - resource acquisition is initialization
+		-Every resource should be wrapped in a stack-allocated object, whose job is to free it
+
+	-eg: FILES
+		{
+			ifstream f ("file"); // acquiring the resource
+					 	= initializing the object (f)
+			// the file is guaranteed to be released when f is popped from the stack (f's dtor runs)
+		}
+	-This can be done with dynamic memory:
+		class std::unique_ptr<T>
+			-takes a T* in the ctor
+			-the dtor will delete the pointer
+		-in between -can dereference just like a ptr
+	
+	-Now fix f();
+	void f(){
+		unique_ptr<MyClass> p {new MyClass}; 
+		// OR unique_ptr<MyClass> p = make_unique<MyClass>(...);
+		MyClass mc;					   ^ctor args
+		g();
+	} // no leaks here, GUARANTEED
+	-For brevity, use "auto"
+	auto p = make_unique<MyClass>(...);
+
+	-Difficulty:
+	class C {...};
+	...
+	unique_ptr<C> p {new C {...}};
+	unique_ptr<c> q = p;
+	// double free: both q p thinks it is their job to free the pointer
+	// unique_ptr is taking OWNERSHIP
+
+	-What happens when a unique_ptr is copied 
+		-don't want to delete the same ptr twice!
+	-Instead copying is disabled for unique_ptrs, they can only be MOVED
+	-Can return unique_ptr through functions (because MOVE is called when returning objects)
+
+Sample implementation:
+	template<typename T> class unique_ptr{
+		T *ptr;
+		public:
+			explicit unique_ptr (T *p): ptr {p}{}
+			~unique_ptr(){delete ptr}
+			unique_ptr(const unique_ptr &) = delete; // delete means take away
+			unique_ptr &operator=(const unique_ptr &) = delete;
+			unique_ptr(unique_ptr &&other): ptr{other.ptr}{other.ptr = nullptr;}
+			unique_ptr &operator=(unique_ptr &&other){
+				std::swap(ptr,other.ptr);
+				return *this;
+			}
+			T &operator *(){return *ptr;}
+	}; // If you want to have true shared ownership - std::shared_ptr
+	{
+	auto p1 = make_shared<C>(...);
+		if(...){
+			auto p2=p1;
+		} // p2 popped; ptr NOT deleted
+	} p1 popped; ptr IS deleted
+
+	-shared_ptrs maintain a REFERENCE COUNT
+	-count of all shared_ptrs pointing at that obj
+	-Memory is feed when the # of shared_ptrs pointing to it hits 0
+
+	-eg:
+		(define l1 (cons 1 (cons 2 (cons 3 empty))))
+		(define l2 (cons 4 (rest l1)))
+		   sp 	  sp 	 sp
+		l1 -> [1|]-->[2|]-->[3|/]
+		   sp 	  sp	
+		l2 -> [4|]----^
+
+	-use shared_ptrs & unique_ptrs for ownership
+	-use raw ptrs for non-owning pointers
+	-DRAMATICALLY reduces the chances of leaks
+	-4 bonus marks for not causing a leak in the game
