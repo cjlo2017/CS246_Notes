@@ -1,0 +1,185 @@
+LEC 20171123
+
+======3 Levels of exception safety for a f'n f:
+	-no corruptions to programs/underlying datastructure after the function called throws an exception
+	-exception SAFETY
+	1-Basic guarantee: if an exception occurs, the program will be in some valid state
+		-no leaks, class invariants maintained			  ^need to find out what state
+	2-Strong guarantee: if an exception is raised while executing f, the state of the program will be
+	  as it was before f was called (retract to pre-f() state)
+	3-No-throw guarantee: f will never throw an exn, and always accomplish it's task
+
+	-eg:
+	class A{...};
+	class B{...};
+
+	class C{
+		A a;
+		B b;
+		public:
+			void f(){
+				a.g(); //may throw(strong guarantee)
+				b.h(); //may throw(strong guarantee)
+			}
+	};
+	-Is C::f exn safe?
+		-if a.g() throws: nothing has happened yet - OK
+		-if b.h() throws: effects of g would have to be undone to offer the strong guarantee
+			-very hard or impossible if g has non-local side-effects
+			-if g prints/declares war on a foreign country, impossible to undo effects
+		-No, C::f probably not exception safe
+	-If A::g, B::h do not have non-local side-effects, can use COPY & SWAP
+	class C{
+		...
+		void f(){
+			A atemp = a;	^ If those throw,
+			B atemp = b;	| original a & b still intact
+			atemp.g();	|
+			btemp.h();	v
+			a = atemp;	^ But what if copy assignment throws?
+			b = btemp;	v
+		}
+	};
+	
+	-Better if swap was no throw. Copying ptrs cannot throw
+	
+	SOLN: Use the PIMPL idiom
+	struct CImpl{
+		A a;
+		B b;
+	};
+	class C{
+		unique_ptr<CImpl> pImpl;
+		public:
+			void f(){
+				auto temp = make_unique<CImpl>(*pImpl);
+				temp->a.g();
+				temp->b.h();
+				std::swap(pImpl,temp); //guaranteed no-throw
+			}
+	};
+	-If either A::g or B::h offer no exn safety guarantee, then neither can C::f 
+
+======EXN SAFETY & the STL - VECTORS======
+-Vectors
+	-encapsulate a leap-allocated array
+	-RAII - when a stack-allocated vector goes out of scope
+		the internal heap-allocated array is freed
+	void f(){
+		vector<C> v;
+		...
+	} // v goes out of scope - array is freed C dtor runs on all objs in the vector
+
+	-BUT:
+	void g(){
+		vector<c*> v;
+		...
+	} // array is freed, ptrs don't have dtors, so any objs pointed at by the ptrs are not deleted
+		-v doesn't know whether the ptrs in the array own the objects they point at (ownership)
+		-the ptrs could be pointing to places on the stack
+		-the ptrs could be pointing at the same object
+
+	-[To delete items]:
+	for(auto &x:v) delete x;
+
+	void h(){
+		vector<unique_ptr<c>> v;
+		...
+	} // when array is freed, the unique_ptr dtor is run, objects ARE deleted
+	-NO explicit allocations
+	
+	vector<shared_ptr<c>> v;
+
+	vector<T>::emplace_back
+	-offers a strong guarantee
+		-if the array if full (size == cap)
+		->allocate a new array
+			-if this throws, nothing has happened
+		->copy the objects over (copy ctor)
+			-if this throws, destroy the new array
+			-old array still intact
+			-strong GUARANTEE
+		->delete old array
+			-no-throw guarantee
+	-BUT:
+	-copying is expensive
+	-old data will be thrown away
+	-wouldn't it be faster to MOVE the objects
+		->allocate a new array
+		->MOVE the objs over (move ctor)
+			-if a move ctor throws
+			-can't offer the strong guarantee
+			-original no longer intact
+		->delete old array
+	-If the move ctor is no-throw, emplace_back will use it (exn safe, cuz all the sub-steps are no-throw)
+	-Else, it will use the copy ctor (slower, but exn safe)	
+
+	-So your move ops should provide the no-throw guarantee, and you should indicate that they do:
+	class C{
+		...
+		public:
+			C(C &&other) noexcept{...}
+			C &operator=(C &&other) noexcept {...}
+	};
+	-operations are speeded up in general
+
+	-If you know a f'n will never throw/propagate an exn, declare noexcept
+		->facilitates optimization
+	-At minimum: move & swaps should be noexcept
+
+=======CASTING======
+	-In C:
+	Node n;
+	int *ip = (int *)(&n);
+		  ^cast: forces compiler to treat a Node* as if it were an int*
+		   So we can point an int* at a Node
+	-C-style casts should be avoided in C++
+	-If you MUST cast, use a C++ style cast
+
+	-4 Kinds:
+		-static_cast: "sensible" casts
+		-eg:
+			-double->int
+				double d;
+				int f(int x);
+				f(static_cast<int>(d));
+			//note you can find it easily if you suspect a cast is causing a bug
+		
+			-superclass ptr -> subclass ptr
+				Book *b = new Text{...};
+				Text *t = b; // illegal, cuz the compiler can't know 
+						for sure b is pointing at a text and not a just a book
+				Text *t = static_cast<Text *>(b);
+			-you are taking responsibility that b actually pts at a Text - "Trust me."
+
+		-reinterpret_cast: unsafe, implementation specific, "weird" conversions
+		 (I know about the compiler enough that I trust the compiler will do that for me)
+			Student s;
+			Turtle *t = reinterpret_cast<Turtle *>(&s);
+	
+		-const_cast - for adding/removing const - only C++ cast that can "cast away const"
+			void g(int *p){...} // Happen to know g doesn't modify *p
+			void f(const int *p){ // can't call g(p)
+				...
+				g(const_cast <int *>(p));
+				...
+			}
+			
+			-"const poisoning"
+			<-------const correct----> <----doesn't use const------>
+			[_________________________|____________________________]
+						  |----->
+						  ^the boundary shifts as you fix the const errors
+						   but forces you to fix all const errors
+						   const_cast can be used to shut the compiler up
+
+		-dynamic_cast - Is it safe to convert a Book* to a Text*
+		 (generally not a good idea)
+			Book *p = ...
+			Text *t = static_cast<Text *>(pb); // is it safe?
+			
+			-Tentative cast:
+			Text *t = dynamic_cast<Text *>(pb);
+			-2 outcomes:
+			=>success - t points at the object, proceed
+			=>failure - t will be a nullptr
