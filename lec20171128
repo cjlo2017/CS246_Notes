@@ -137,13 +137,31 @@ With dynamic casting we can construct a sol'n to the polymorphic assignment prob
 		-therefore: virt. methods produe larger projects then if all methods were non-virtual	
 		-space cost
 
+		-note that a ptr has the size of 2 ints
+
 	-Concretely, how is an object laid out? -Compiler dependent
-	-g++	[vptr]
+	-g++:
+		[vptr]
 	       /[....]
 	 fields [....]
 	       \[....]
 	// some graphs are lost here. Ask others in class for a copy
-	
+	class A{
+		int a,c;
+		virtual void f();
+	};
+	class B: public A{
+		int b,c;
+	};
+
+	[vptr]		[vptr]<---------so a ptr to B looks like
+	[ a  ]		[ a  ]		ptr to A if you ignore the
+	[ c  ]		[ c  ]		last two fields
+			[ b  ]
+			[ d  ]
+
+	-a vptr is always place first so you always know where the vptr is
+	 even if you don't know the object type
 
 ======Multiple Inheritance======
 	-a class can inherit from more than one class
@@ -190,6 +208,13 @@ With dynamic casting we can construct a sol'n to the polymorphic assignment prob
 	-should B::a, C::a be the same or different?
 
 	-What if we want (Deadly diamond)
+	-eg: 
+		-Vehicle owns-a Engine
+		-WaterVehicle inherits from Vehicles
+		-LandVehicle inherits from Vehicles
+		-AquaDuck inherits from both WaterVehicle and LandVehicle (AmphibianVehicle)
+		-AquaDuck only owns 1 engine
+
 
 	   [A]
 	    ^
