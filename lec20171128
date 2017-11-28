@@ -1,0 +1,249 @@
+LEC 20171128
+
+Recall:
+	Book *pb = /*sth*/;
+	Text *pt = dynamic_cast<Text*>(pb);
+
+	if(pb) cout << pt->getTopic()
+	else cout << "Not a Text" << endl;
+	
+	-can use dynamic_cast to make decisions based on an object's RTTI(runtime type information)
+
+======Dynamic casting(cont)======
+
+Can we do this using smart ptrs? Yes!
+	-static_pointer_cast	|-map shared_ptrs to
+	-cosnt_pointer_cast	| shared_ptrs
+	-dynamic_pointer_cast	|
+	
+
+	void whatIsIt(shared_ptr<Book> b){
+		if(dynamic_pointer_cast<Comic>(b)) cout<<"Comic";
+		else if (dynamic_pointer_cast<Text>(b)) cout<<"Text";
+		else cout << "Normal book";
+	}
+
+	-code like this is tightly coupled to the Book class hierarchy and may indicate bad design
+
+	BETTER:
+	-virtual methods/ visitor
+	-coupling between host and visitor is localized
+		-when you add a new host subclass, you already know you need to add the overload
+		 to your visitor class
+
+	
+Dynamic casting also works with references:
+	Text t {...};
+	Book &b = t;
+	Text &t2 = dynamic_cast<Text &>(b);
+
+	-If the cast succeeds, t2 refers to t
+	-If not, you get an exception because there can't be "null references"
+		-exception bad_cast
+
+With dynamic casting we can construct a sol'n to the polymorphic assignment problem:
+	Text &Text::operator=(const Book &other){ //virtual
+		const Text&textother = dynamic_cast<const Text &>(other);
+								  ^throws if other is not a Text
+								   // this still offers strong guarantee
+		if(this==&textother) return *this;
+		Book::operator=(other);
+		topic = textother.topic;
+		return *this;
+	}
+	-note: that the problem is not solved, but is pushed back to the client
+	 (what to do and what not)
+
+	-note: dynamic casting only works on classes that have at least one virtual method
+
+
+======HOW VIRTUAL METHODS WORK======
+
+	class Vec{
+		int x,y;
+		void f();
+	};
+	class Vec2{
+		int x,y;
+		virtual void f();
+	};
+	-What's the difference?
+
+	-Suppose:
+	Vec v {1,2};
+	Vec2 w {1,2};
+	-do they look the same in memory?
+	// sizeof(v)==8, sizeof(w)==16
+
+	-First note:
+		-8 is the space for 2 ints
+		-this implies there's no space for the methods
+		-compiler stores the methods with all other functions (in code section)
+
+	-Recall:
+	Book *pb = new {Book/Text/Comic	
+	pb->isItHeavy();
+	
+	-isItHeavy is virtual
+		-choose which version of isItHeavy to run, based on the type of the actual object
+		-in general, the type of the object is based on runtime, so the compiler can't know in advance
+		-correct isItHeavy must be chosen at runtime. How?
+
+	-For each class with at least one virtual method, the compiler creates a table of f'n pointers
+	 (the VTABLE virtual-table)
+
+	-eg:
+	class C{				|	+------>vtable
+		int x,y;			| 	|	["C"] 	
+		virtual void f();		|	|	[ f ]----------->[C:f ] //in code section
+		virtual void g();		|	|	[ g ]----------->[C:g ] //in code section
+		void h();			|	|	[~C ]----------->[C:~C]	//in code section
+		virtual ~C();			|	|
+						|	|
+						|	+---------------+-----------------------+
+	};					|	 	 	|			|
+						|	c:		|	d:		|				
+						|	[  x ]		|	[  x ]		|
+						|	[  y ]		|	[  y ]		|
+						|	[vptr]----------+	[vptr]----------+
+
+	-C objects have an extra ptr (the VPTR) that pts to C's vtable C c,d;
+
+	-eg: Book, Text
+
+		Book b;
+		    ?
+		+------>[title   ] 	+------>["book"   ]---->[Book::isItHeavy]
+		|	[author  ]	|	[isItHeavy]	[	...	]
+	pb	|	[numPages]	|			[	...	]
+	[]------+	[vptr    ]------+
+		|
+		| Text t;
+		|   ?
+		+------>[title   ]	+------>["Text"   ]---->[Text::isItHeavy]
+			[author  ]	|	[isItHeavy]	[	...	]
+			[numPages]	|			[	...	]
+			[topic   ]	|
+			[vptr    ]------+
+	
+	-Calling a virtual method: (at runtime)
+		-follow vptr to the vtable
+		-fetch ptr to actual method from vtable
+		-follow the f'n pointer and call the f'n
+		-therefore: virtual methods calls incur a small overhead cost in time
+		
+		-ALSO:
+		-having virtual methods adds a vptr to the object
+		-therefore: virt. methods produe larger projects then if all methods were non-virtual	
+		-space cost
+
+	-Concretely, how is an object laid out? -Compiler dependent
+	-g++	[vptr]
+	       /[....]
+	 fields [....]
+	       \[....]
+	// some graphs are lost here. Ask others in class for a copy
+	
+
+======Multiple Inheritance======
+	-a class can inherit from more than one class
+	class A{
+		public:
+			int a;
+	};
+	class B{
+		public:
+			int b;
+	};
+	class C: public A, public B{
+		void f(){
+			cout << a << ' ' << b;
+		}
+	};
+
+	-Challenges: Suppose
+
+	[A ]	[A ]
+	[+a]	[+a]
+	 ^	 ^
+	 |	 |
+	[B ]	[C ]
+	[+b]	[+c]
+	 ^	 ^
+	 |	 |
+	 +--+----+
+	    |
+	   [D ]
+	   [+d]
+
+	class D: public B, public C{
+		public:
+			int d;
+	};
+	D dobj;
+	dobj.a; // which a? Ambiguous // not allowed
+	// Need to specify:
+	dobj.B::a; or dobj.C::a;
+
+	-But if B & C both inherit from A, should there be ONE A part of D
+	 or TWO(default) ?
+	-should B::a, C::a be the same or different?
+
+	-What if we want (Deadly diamond)
+
+	   [A]
+	    ^
+	   / \
+	  /   \
+	 /     \
+	/	\
+       [B]     [C]
+	^	^
+	\	/
+	 \     /
+	  \   /
+	   \ /
+	   [D]
+	
+	-Make A a VIRTUAL base class - use VIRTUAL inheritance
+
+	class B: virtual public A{...};
+	class C: virtual public A{...};
+
+	-eg: IO stream hierarchy
+				ios_base
+				|
+				ios
+			+-------+---------------+
+			|			|
+			istream		     ostream
+			|     \		    /	|
+			|      \           /    |
+			|	\	  /	|
+	+---------------+	 \       /	+-----------------------+
+	|		|	  \     /	|			|
+	|		|	   \   /	|			|
+	|		|	    \ /		|			|
+	|		|	iostream	|			|
+	|		|	    |		|			|
+   istringstream    ifstream	    |      ostringstream	    ofstream
+				+---+---+	
+				|	|
+			     fstream  stringstream
+
+	-How will this be laid out?
+	[  vptr  ] // vptr should look like an A*, B*, C*, D*
+	[A fields] // looks like A, has vptr before it
+	[B fields] // looks like B, has A before it
+	[C fields] // doesn't look like a C object (there is no B object before it, just A)
+	[D fields] // looks like D, has B, C before it
+
+	-What does g++ do?
+	[  vptr  ]
+	[B fields]
+	[  vptr  ]
+	[C fields]
+	[D fields]
+	[  vptr  ]
+	[A fields]
+	-we will explain why next lecture
