@@ -1,0 +1,219 @@
+LEC 20171130
+======COMPILER MEMORY LAYOUT FOR MULTIPLE INHERITANCE======
+Recall:
+	   [A]
+	    ^
+	   / \
+	  /   \
+	 /     \
+	/	\
+       [B]     [C]
+	^	^
+	\	/
+	 \     /
+	  \   /
+	   \ /
+	   [D]
+
+	-What does g++ do?
+	[  vptr  ] <- ptr to D, B
+	[B fields]
+	[  vptr  ] <- ptr to C
+	[C fields]
+	[D fields]
+	[  vptr  ] <- ptr to A
+	[A fields]
+
+	B b;
+	-guess:
+		[  vptr  ]
+		[B fields]
+		[  vptr  ]
+		[A fields]
+	-B needs to be laid out so that we can find it's A part,
+	 but the distance to the A part VARIES
+	-Sol'n:
+		-location of the superclass object is stored in vtables
+	-parallel with VIRTUAL METHODS
+		-virtual method:in order to call a virtual method, 
+		 you have to go to the vtable to look for the method
+		-virtual inheritance: in order to find your superclass
+		 you have to go to the virtual table to look for its location
+	-Diagram doesn't look like A,B,C,D simultaneously
+		-but slices of it do look like A,B,C,D
+	-therefore: ptr assignment among A,B,C,D changes the address stored in the
+	 ptr
+	D *d = ...;
+	A *a = d;
+
+	-static_cast, dynamic_cast, under multiple inheritance will also change
+	 the value of the ptr
+	-reinterpret_cast will not.
+
+
+======TEMPLATE FUNCTIONS======
+	template<typename T> T min(T x,T y){
+		return x<y? x: y;
+	}
+	int f(){
+		int x=1,y=2;
+		int z=min(x,y);
+		// T = int
+		// we don't have to say min<int>
+	}
+
+	-C++ can infer that T=int from the types of x&y
+		=>applies to FUNCTION templates ONLY
+	-If c++ can't determine T, you can tell it:
+		z = min<int>(x,y);
+		
+		char w=min('a','c'); // T = char
+		auto f = min(1.0,3.0); // T = double
+		
+	-eg: std::swap, std::move, make_shared, make_unique
+
+	-For what types T can min be used?
+		-any type for which operator< is define
+
+RECALL:
+	void for_each(Abstract Iterator &start, Abstract Iterator &end, int(*f)(int){
+		while(start!=finish){
+			f(*start);
+			++start;
+		}
+	}
+	-Requirements:
+		-Abstract iterator must support !=, *, ++
+		-f must be callable as a f'n
+	-Make these template arguments
+	
+	template<typename Iter,typename Fn> void for_each(Iter start,Iter finish, Fn f){
+		// as before
+	}
+	-now Iter can be ANY type that supports ++, !=, * (including raw ptrs)
+
+	-so the following is legal:
+	void f(int n){cout << n << endl;}
+	int a[] = {1,2,3,4,5};
+	for_each(a,a+5,f); //prints the array
+
+======C++ STL <algorithm> library======
+	-suite of template functions, many of which work on iterators
+	-eg: for_each(as above)
+	template<typename Iter,typename T>
+	Iter find(Iter first, Iter last, const T&val){
+		// returns an iterator to the first element in [first,last)
+		// matching val
+		// or last, if val not found
+	}
+
+	-count - like find, but returns # of occurances of val
+
+	template<typename InIter, typename OutIter>
+	OutIter copy(InIter first, InIter last, OutIter result){
+		// copies one container range [first,last) to another,
+		// starting at result
+	}
+	-note: does not allocate space: client is responsible for ensuring enough space
+
+	-eg:
+	vector<int> v {1,2,3,4,5,6,7};
+	vector<int> w(4); // space for 4 ints
+	copy(v.begin()+1,v.begin()+5,w.begin()); 
+	// w = {2,3,4,5};
+
+	
+	template<typename InIter,typename OutIter,typename Fn>
+	OutIter transform(InIter first,InIter last, OutIter result, Fn f){	
+		while(first != last){
+			*result = f(*first);
+			++first;
+			++result;
+		}
+		return result;
+	}
+
+	-eg:
+	int add1(int n){return n+1};
+	vector<int> v {2,3,5,7,11};
+	vector<int> w (v.size());
+	transform(v.begin(),v.end(),w.begin(),add1);
+	// w={3,4,6,8,12};
+
+======How general is this code?======
+1-What can we use for Fn?
+2-What can we use for InIter/OutIter?
+-Ans:
+	1-How is f used? 
+		-f(*first)
+		-f can be anything that can be called as a f'n
+		-can write operator() for objects
+		-eg:
+		class Plus1{
+			public:
+			int operator()(int n){return n+1;}
+		};
+		Plus1 p;
+		p(4); //produces 5
+		transform(v.begin(),v.end(),w.begin(),Plus1 {});
+							    ^ctor call (creates an object)
+	
+	-Generalize:
+		class Plus{
+			int m;
+			public:
+				Plus(int m):m {m}{}
+				int operator()(int n){return n+m;}
+		};
+		transform(v.begin(),v.end(),w.begin(),Plus {1});
+							^objects that act like f'ns are called FUNCTION OBJECTS
+
+		-Advantage of f'n objects - can maintain states
+		class IncreasingPlus{
+			int m=0;
+			public:
+				int operator()(int n){return n+(m++);}
+				void reset(){ m = 0;}
+		};
+		vector<int> v (5,0); // 0,0,0,0,0
+		vector<int> w (v.size());
+		transform(v.begin(),v.end(),w.begin(),IncreasingPlus{});
+		// w={0,1,2,3,4};
+
+	-Consider: How many ints in a vector v are even?
+		vector<int> v = {...};
+		bool even(int n){return n%2==0;}
+		int x = count_if(v.begin(),v.end(),even);
+
+		-Seems like a waste to explicitly create the f'n even
+		-Also, can't keep even close to count if because functions f'ns must be
+		 declared at file or namespace scope (ie, not inside other functions)
+		
+		-If this were Racket, we would use lambda.
+		-Do the same here!
+		int x = count_if(v.begin(),v.end(),[](int n){return n%2==0;});
+						    ^	     ^lambda //short hand for a class with operator()
+						    can place stuff in []
+
+		-can we store lambda in a variable?
+		-yes, but because we can't explicitly say the type of lambda
+		auto even = [](int n){return n%2==0};
+	
+	2-Iterators - apply the notion of iteration to other data sources, eg: streams
+		#include <iterator>
+		vector<int> v {1,2,3,4,5};
+		ostream_iterator<int> out {cout, ", "};
+		copy(v.begin(),v.end(),out);
+		//Prints 1, 2, 3, 4, 5, 
+
+		-there are also istream_iterators
+
+		vector<int> v {1,2,3,4,5};
+		vector<int> w; //empty
+		copy(v.begin(),v.end(),w.begin()); // wrong
+		-remember that copy does not allocate space to w
+		-It can't: it doesn't even know that w is iterating over a vector!
+
+		-But what if we had an iterator whose assignment operator inserts a new item?
+		copy(v.begin(),v.end(),back_inserter(w)); // copies to the end of w, allocating space as it goes
+					^available for any container that supports push_back

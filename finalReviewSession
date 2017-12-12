@@ -1,0 +1,145 @@
+======FINAL REVIEW SESSION======
+1a) Visitor Pattern
+	-double dispatch
+	-	A	B
+		|	|
+		A_i	B_i 
+	-specialize code for both hierarchies
+	class A: public A{
+		...
+		public:
+			void accept(B &b) override{
+				v.visit(*this);
+					^(*this) is different for diff subclasses
+			}
+	};
+	class B1: public B{
+		...
+		public:
+			void visit(A1 &a) override{
+				...
+			}
+			// one overload for each subclass
+	};
+	-advantages: a little less coupled
+6) Template functions
+	-implement foldl and foldr in Racket in C++
+	-iterative approach is easier
+	// FOLDL
+	template <typename Fn, typename T, typename XIter>	
+	T foldl(Fn f, T base, XIter begin, const XIter end){
+		// 	^	^		^won't change that
+		//	|	|we want to increment begin
+		//    	|make a copy so we can manipulate if wanted
+		while(begin != end){
+			base = f(*begin,base);
+			++begin;
+		}
+		return base;
+	}
+	-recursive approach is easier
+	// FOLDR
+	template <typenameFn, typename t, typename XIter>
+	T foldr(Fn f,const T base, XIter begin, const XIter &end){
+		if(!(begin!=end)) return base;
+		else{
+			XIter next = begin;
+			++next; // a bit like (rest list)
+			return f(*begin,foldr(f,base,next,end));
+		}
+	}
+
+2) FORWARD DECLARATION 
+	class K: public A{ // #include
+		B b; // #include
+		C* c; // FD 
+		public:
+		D& d; // FD
+		void foo(E) // FD
+		void foo(F*) // FD
+		void foo(G&) // FD
+		H func() // FD
+		I* func2() // FD
+		J& func3() // FD
+	};
+	std::ostream &operator<<(std::ostream &, const K&); // FD
+	-you could do:
+			class ostream;  // OR
+			#include <iostream>;
+3) 	1-basic guarantee
+		-copy assn called in try block
+		-return statement calls either copy assn/copy move
+	2-strong guarantee
+		-assuming A,B copy ctor has strong guarantee
+	3-nothrow
+		-wrong program doesn't mean that it will throw	
+		-just check all the lines for the exception safeties
+		-exception safety is the weakest exn safety
+	4-basic
+		-the problem is in swapping the D object
+		-we don't know if copy/move assn 's exn safety
+
+5) ITERATORS
+	(a):
+		template <typename T>
+		class BinTree{
+			T data;
+			BinTree *left, *right;
+			BinTree *parent;
+			public:
+				...
+		};	
+	(b):
+		template <typename T>
+		class BinTree{
+			struct BinNode{				|ideally in binTree.cc
+				T data;				|
+				BinTree *left, *right, *parent;	|
+			};					|
+			unique_ptr<BinNode> node;
+			public:
+				...
+		};
+	(c) implementing an iterator:
+		template <typename T>
+		class BinTree<T>:: Iterator{
+			BinTree<T> *curr;
+			BinTree<T>::Iterator(BinTree *b): curr{b}{}
+			public:
+				bool operator!=(const Iterator &other){
+					return curr != other.curr;
+				}
+				T &operator *(){return curr->node->data;}
+				Iterator &operator++(){
+					//if it has right child
+					if(curr->node->right){
+						curr=curr->node->right;
+						while(curr->node->left){
+							curr = curr->node->left;
+						}
+					} else {
+						// if I am a right child, I have to go all the way up until I'm
+						// not a right child (ie: left child)
+						// note: parent has to exist too
+						while((cur->node->parent) && 
+						      (curr==cur->node->parent->node->right)){
+							curr=curr->node->parent;
+						}
+						curr = curr->node->parent;
+					}
+					return *this;
+				}
+				return *this;
+		};
+		-BinTree.cc:
+		Iterator begin(){
+			Iterator curr {*this};
+			while(curr->node->left){
+				curr = curr->node->left;
+			}
+			return Iterator {curr};
+		};
+		Iterator end() {return Iterator {nullptr};}
+
+7) refer to notes
+
